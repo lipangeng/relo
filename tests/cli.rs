@@ -230,6 +230,7 @@ fn local_use_outputs_shell_exports_without_modifying_active() {
     assert!(!root.join("active").exists());
 }
 
+#[cfg(not(windows))]
 #[test]
 fn local_use_accepts_temporary_path_overrides() {
     let root = temp_root("use-path-overrides");
@@ -278,6 +279,7 @@ fn config_env_supports_path_and_literal_values() {
     assert!(out.contains("export JAVA_OPTS=\"-Xmx1g\""));
 }
 
+#[cfg(not(windows))]
 #[test]
 fn release_specific_config_overrides_env_and_extends_path() {
     let root = temp_root("release-override");
