@@ -4,8 +4,8 @@ use std::path::PathBuf;
 #[derive(Parser)]
 #[command(name = "relo", version)]
 pub struct Cli {
-    #[arg(short = 'd', long = "dir", default_value = ".")]
-    pub dir: PathBuf,
+    #[arg(short = 'd', long = "dir")]
+    pub dir: Option<PathBuf>,
 
     #[command(subcommand)]
     pub command: Command,

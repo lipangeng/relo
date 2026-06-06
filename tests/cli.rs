@@ -26,6 +26,14 @@ fn run(root: &Path, args: &[&str]) -> Output {
         .unwrap()
 }
 
+fn run_with_relo_ctx(root: &Path, args: &[&str]) -> Output {
+    Command::new(bin())
+        .env("RELO_CTX", root)
+        .args(args)
+        .output()
+        .unwrap()
+}
+
 fn stdout(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).replace('\r', "")
 }
@@ -89,10 +97,52 @@ fn init_creates_shared_layout_and_config() {
     assert!(root.join("relo.yaml").is_file());
     assert!(!root.join("relo.toml").exists());
     let config = fs::read_to_string(root.join("relo.yaml")).unwrap();
-    assert!(config.contains("home_mode: shared"));
-    assert!(config.contains("path:"));
-    assert!(config.contains("prepend:"));
-    assert!(config.contains("- active/bin"));
+    assert!(config.contains("name: relo-init-shared-"));
+    assert!(!config.contains("home_mode:"));
+    assert!(!config.contains("version_separator:"));
+    assert!(!config.contains("path:"));
+    assert!(!config.contains("env:"));
+    assert!(!config.contains("releases:"));
+}
+
+#[test]
+fn relo_ctx_env_selects_root_when_dir_option_is_omitted() {
+    let root = temp_root("env-root");
+    assert_success(run_with_relo_ctx(&root, &["init"]));
+
+    assert!(root.join("relo.yaml").is_file());
+    assert!(root.join("releases").is_dir());
+}
+
+#[test]
+fn dir_option_overrides_relo_ctx_env() {
+    let env_root = temp_root("env-root-ignored");
+    let arg_root = temp_root("arg-root");
+    let output = Command::new(bin())
+        .env("RELO_CTX", &env_root)
+        .arg("-d")
+        .arg(&arg_root)
+        .arg("init")
+        .output()
+        .unwrap();
+    assert_success(output);
+
+    assert!(!env_root.join("relo.yaml").exists());
+    assert!(arg_root.join("relo.yaml").is_file());
+}
+
+#[test]
+fn init_config_uses_runtime_defaults_for_omitted_path() {
+    let root = temp_root("init-default-path");
+    init(&root);
+    mkdir_release(&root, "3.9.9");
+
+    let release = root.join("releases").join("3.9.9");
+    let out = assert_success(run(&root, &["use", "--shell", "posix", "3.9"]));
+    assert!(out.contains(&format!(
+        "export PATH=\"$PATH:{}\"",
+        shell_escape_path(&release.join("bin"))
+    )));
 }
 
 #[test]
@@ -105,6 +155,8 @@ fn init_versioned_creates_homes_layout() {
     assert!(!root.join("home").exists());
     let config = fs::read_to_string(root.join("relo.yaml")).unwrap();
     assert!(config.contains("home_mode: versioned"));
+    assert!(!config.contains("version_separator:"));
+    assert!(!config.contains("path:"));
 }
 
 #[test]
@@ -224,7 +276,7 @@ fn local_use_outputs_shell_exports_without_modifying_active() {
         shell_escape_path(&root.join("home"))
     )));
     assert!(out.contains(&format!(
-        "export PATH=\"{}:$PATH\"",
+        "export PATH=\"$PATH:{}\"",
         shell_escape_path(&release.join("bin"))
     )));
     assert!(!root.join("active").exists());
@@ -253,11 +305,13 @@ fn local_use_accepts_temporary_path_overrides() {
     ));
 
     assert!(out.contains(&format!(
-        "export PATH=\"{}:{}:$PATH\"",
-        shell_escape_path(&release.join("sbin")),
+        "export PATH=\"{}:$PATH\"",
+        shell_escape_path(&release.join("sbin"))
+    )));
+    assert!(out.contains(&format!(
+        "export PATH=\"$PATH:{}:/opt/fallback/bin\"",
         shell_escape_path(&release.join("bin"))
     )));
-    assert!(out.contains("export PATH=\"$PATH:/opt/fallback/bin\""));
 }
 
 #[test]
@@ -360,7 +414,7 @@ fn local_use_can_output_powershell_script() {
         powershell_escape_path(&root.join("home"))
     )));
     assert!(out.contains(&format!(
-        "$env:PATH = '{}' + ';' + $env:PATH",
+        "$env:PATH = $env:PATH + ';' + '{}'",
         powershell_escape_path(&release.join("bin"))
     )));
 }
@@ -380,7 +434,7 @@ fn local_use_can_output_cmd_script() {
         root.join("home").display()
     )));
     assert!(out.contains(&format!(
-        "set \"PATH={};%PATH%\"",
+        "set \"PATH=%PATH%;{}\"",
         release.join("bin").display()
     )));
 }
@@ -416,7 +470,8 @@ fn show_and_config_are_human_readable() {
     assert!(show.contains("releases: 1"));
 
     let config = assert_success(run(&root, &["config"]));
-    assert!(config.contains("home_mode: shared"));
+    assert!(config.contains("name: relo-show-config-"));
+    assert!(!config.contains("home_mode: shared"));
 }
 
 #[test]

@@ -48,7 +48,13 @@ relo init powershell
 relo init cmd
 ```
 
-如果不传 `-d`，默认使用当前工作目录。
+如果不传 `-d`，`relo` 会优先使用 `RELO_CTX`，未设置时才使用当前工作目录。
+这能让一次性脚本更简洁：
+
+```bash
+RELO_CTX=/opt/relo/maven relo init
+RELO_CTX=/opt/relo/maven relo use -g 3.9.9
+```
 
 ## 快速开始
 

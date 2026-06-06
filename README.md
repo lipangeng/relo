@@ -48,7 +48,13 @@ relo init powershell
 relo init cmd
 ```
 
-If `-d` is omitted, `relo` uses the current working directory.
+If `-d` is omitted, `relo` uses `RELO_CTX` when it is set, otherwise it uses
+the current working directory. This keeps one-off scripts compact:
+
+```bash
+RELO_CTX=/opt/relo/maven relo init
+RELO_CTX=/opt/relo/maven relo use -g 3.9.9
+```
 
 ## Usage
 

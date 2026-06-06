@@ -10,6 +10,7 @@ use clap::Parser;
 use cli::{Cli, Command, ConfigCommand, HomeArg, InitTarget, PrintTarget, ShellArg};
 use layout::Layout;
 use shell::ShellKind;
+use std::path::PathBuf;
 
 fn main() {
     if let Err(err) = run() {
@@ -20,7 +21,7 @@ fn main() {
 
 fn run() -> Result<()> {
     let cli = Cli::parse();
-    let root = std::fs::canonicalize(&cli.dir).unwrap_or(cli.dir);
+    let root = root_dir(&cli);
 
     match cli.command {
         Command::Init {
@@ -154,6 +155,19 @@ fn run() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn root_dir(cli: &Cli) -> PathBuf {
+    let dir = cli
+        .dir
+        .clone()
+        .or_else(|| {
+            std::env::var_os("RELO_CTX")
+                .filter(|value| !value.is_empty())
+                .map(PathBuf::from)
+        })
+        .unwrap_or_else(|| PathBuf::from("."));
+    std::fs::canonicalize(&dir).unwrap_or(dir)
 }
 
 impl From<ShellArg> for ShellKind {

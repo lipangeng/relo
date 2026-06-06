@@ -1,6 +1,7 @@
 use crate::cli::HomeArg;
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
+use serde_yml::Value;
 use std::collections::BTreeMap;
 use std::path::{Component, Path};
 
@@ -9,6 +10,12 @@ use std::path::{Component, Path};
 pub enum HomeMode {
     Shared,
     Versioned,
+}
+
+impl Default for HomeMode {
+    fn default() -> Self {
+        Self::Shared
+    }
 }
 
 impl HomeMode {
@@ -31,9 +38,13 @@ impl From<HomeArg> for HomeMode {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub home_mode: HomeMode,
+    #[serde(default)]
     pub version_separator: String,
+    #[serde(default)]
     pub path: PathConfig,
     #[serde(default)]
     pub env: BTreeMap<String, EnvValue>,
@@ -65,6 +76,17 @@ pub enum EnvValue {
     Value { value: String },
 }
 
+const DEFAULT_CONFIG_YAML: &str = r#"name: relo
+home_mode: shared
+version_separator: _
+path:
+  prepend: []
+  append:
+    - active/bin
+env: {}
+releases: []
+"#;
+
 impl Config {
     pub fn default_for(
         root: &Path,
@@ -77,18 +99,18 @@ impl Config {
             .and_then(|value| value.to_str())
             .unwrap_or("relo")
             .to_string();
-        let prepend = if path_prepend.is_empty() {
-            vec!["active".to_string()]
+        let append = if path_append.is_empty() {
+            vec!["active/bin".to_string()]
         } else {
-            path_prepend
+            path_append
         };
         Self {
             name,
             home_mode,
             version_separator: "_".to_string(),
             path: PathConfig {
-                prepend,
-                append: path_append,
+                prepend: path_prepend,
+                append,
             },
             env: BTreeMap::new(),
             releases: Vec::new(),
@@ -98,14 +120,21 @@ impl Config {
     pub fn read(path: &Path) -> Result<Self> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("failed to read config: {}", path.display()))?;
-        let config: Self = serde_yml::from_str(&text)
+        let mut value = default_config_value()?;
+        let user_value: Value = serde_yml::from_str(&text)
+            .with_context(|| format!("invalid relo.yaml: {}", path.display()))?;
+        merge_yaml(&mut value, user_value);
+        let config: Self = serde_yml::from_value(value)
             .with_context(|| format!("invalid relo.yaml: {}", path.display()))?;
         config.validate()?;
         Ok(config)
     }
 
     pub fn write(&self, path: &Path) -> Result<()> {
-        let text = serde_yml::to_string(self)?;
+        let default = default_config_value()?;
+        let mut value = serde_yml::to_value(self)?;
+        prune_defaults(&mut value, &default);
+        let text = serde_yml::to_string(&value)?;
         std::fs::write(path, text).with_context(|| format!("failed to write {}", path.display()))
     }
 
@@ -126,6 +155,50 @@ impl Config {
             validate_env(&release.env)?;
         }
         Ok(())
+    }
+}
+
+fn default_config_value() -> Result<Value> {
+    serde_yml::from_str(DEFAULT_CONFIG_YAML).context("invalid built-in default config")
+}
+
+fn merge_yaml(base: &mut Value, overlay: Value) {
+    match (base, overlay) {
+        (Value::Mapping(base), Value::Mapping(overlay)) => {
+            for (key, value) in overlay {
+                match base.get_mut(&key) {
+                    Some(base_value) => merge_yaml(base_value, value),
+                    None => {
+                        base.insert(key, value);
+                    }
+                }
+            }
+        }
+        (base, overlay) => *base = overlay,
+    }
+}
+
+fn prune_defaults(value: &mut Value, default: &Value) {
+    let Value::Mapping(mapping) = value else {
+        return;
+    };
+    let Value::Mapping(default_mapping) = default else {
+        return;
+    };
+
+    let keys = mapping.keys().cloned().collect::<Vec<_>>();
+    for key in keys {
+        let Some(value) = mapping.get_mut(&key) else {
+            continue;
+        };
+        if let Some(default_value) = default_mapping.get(&key) {
+            prune_defaults(value, default_value);
+            if value == default_value
+                || matches!(value, Value::Mapping(mapping) if mapping.is_empty())
+            {
+                mapping.remove(&key);
+            }
+        }
     }
 }
 
