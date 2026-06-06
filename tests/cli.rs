@@ -62,6 +62,14 @@ fn mkdir_release(root: &Path, name: &str) {
     fs::create_dir_all(root.join("releases").join(name).join("bin")).unwrap();
 }
 
+fn shell_escape_path(path: &Path) -> String {
+    path.display()
+        .to_string()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('$', "\\$")
+}
+
 fn append_config(root: &Path, text: &str) {
     use std::io::Write;
 
@@ -181,18 +189,21 @@ fn local_use_outputs_shell_exports_without_modifying_active() {
     mkdir_release(&root, "3.9.9");
 
     let out = assert_success(run(&root, &["use", "3.9"]));
-    assert!(out.contains(&format!("export RELO_ROOT=\"{}\"", root.display())));
+    assert!(out.contains(&format!(
+        "export RELO_ROOT=\"{}\"",
+        shell_escape_path(&root)
+    )));
     assert!(out.contains(&format!(
         "export RELO_RELEASE=\"{}\"",
-        root.join("releases/3.9.9").display()
+        shell_escape_path(&root.join("releases/3.9.9"))
     )));
     assert!(out.contains(&format!(
         "export RELO_HOME=\"{}\"",
-        root.join("home").display()
+        shell_escape_path(&root.join("home"))
     )));
     assert!(out.contains(&format!(
         "export PATH=\"{}/bin:$PATH\"",
-        root.join("releases/3.9.9").display()
+        shell_escape_path(&root.join("releases/3.9.9"))
     )));
     assert!(!root.join("active").exists());
 }
