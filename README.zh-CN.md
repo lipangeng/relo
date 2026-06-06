@@ -34,10 +34,10 @@ release 目录名必须是 `<semver>` 或 `<semver>_<label>`，例如 `3.9.9`、
 
 ```bash
 relo [-d <dir>] init [--home shared|versioned]
-relo [-d <dir>] init [--path <dir>] [--path-append <dir>]
+relo [-d <dir>] init [--path-prepend <dir>] [--path-append <dir>] [--path <dir>]
 relo [-d <dir>] list
 relo [-d <dir>] show [version]
-relo [-d <dir>] use [--path <dir>] [--path-append <dir>] [version]
+relo [-d <dir>] use [--path-prepend <dir>] [--path-append <dir>] [--path <dir>] [version]
 relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
 relo [-d <dir>] use -g <version>
 relo [-d <dir>] print <root|active|release|home|version> [version]
@@ -116,11 +116,11 @@ path:
   append: []
 ```
 
-`prepend` 会放在原始 `PATH` 前面，`append` 会放在原始 `PATH` 后面。`--path` 是临时 prepend 的简写：
+`prepend` 会放在原始 `PATH` 前面，`append` 会放在原始 `PATH` 后面。`--path` 是 append 的简写：
 
 ```bash
-relo init --path active/bin --path-append tools/bin
-relo use 3.9 --path active/sbin --path-append /opt/fallback/bin
+relo init --path-prepend active/bin --path tools/bin
+relo use 3.9 --path-prepend active/sbin --path /opt/fallback/bin
 ```
 
 相对路径会相对于 relo root 解析，绝对路径会保持原样。支持以下符号前缀：

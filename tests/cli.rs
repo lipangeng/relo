@@ -108,17 +108,17 @@ fn init_versioned_creates_homes_layout() {
 }
 
 #[test]
-fn init_accepts_path_prepend_and_append_shortcuts() {
+fn init_accepts_path_prepend_and_append_options() {
     let root = temp_root("init-path");
     assert_success(run(
         &root,
         &[
             "init",
-            "--path",
+            "--path-prepend",
             "active/bin",
-            "--path",
-            "tools/bin",
             "--path-append",
+            "tools/bin",
+            "--path",
             "/opt/fallback/bin",
         ],
     ));
@@ -243,9 +243,9 @@ fn local_use_accepts_temporary_path_overrides() {
             "use",
             "--shell",
             "posix",
-            "--path",
+            "--path-prepend",
             "active/sbin",
-            "--path-append",
+            "--path",
             "/opt/fallback/bin",
             "3.9",
         ],
@@ -306,7 +306,10 @@ fn global_use_rejects_temporary_path_overrides() {
     init(&root);
     mkdir_release(&root, "1.0.0");
 
-    let err = assert_failure(run(&root, &["use", "-g", "--path", "active/sbin", "1.0.0"]));
+    let err = assert_failure(run(
+        &root,
+        &["use", "-g", "--path-prepend", "active/sbin", "1.0.0"],
+    ));
     assert!(err.contains("path overrides are only valid for local use"));
 }
 

@@ -34,10 +34,10 @@ Release directories must be named as `<semver>` or `<semver>_<label>`, for examp
 
 ```bash
 relo [-d <dir>] init [--home shared|versioned]
-relo [-d <dir>] init [--path <dir>] [--path-append <dir>]
+relo [-d <dir>] init [--path-prepend <dir>] [--path-append <dir>] [--path <dir>]
 relo [-d <dir>] list
 relo [-d <dir>] show [version]
-relo [-d <dir>] use [--path <dir>] [--path-append <dir>] [version]
+relo [-d <dir>] use [--path-prepend <dir>] [--path-append <dir>] [--path <dir>] [version]
 relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
 relo [-d <dir>] use -g <version>
 relo [-d <dir>] print <root|active|release|home|version> [version]
@@ -106,11 +106,11 @@ path:
   append: []
 ```
 
-`prepend` entries are added before the existing `PATH`; `append` entries are added after it. `--path` is a shortcut for a temporary prepend entry:
+`prepend` entries are added before the existing `PATH`; `append` entries are added after it. `--path` is a shortcut for an append entry:
 
 ```bash
-relo init --path active/bin --path-append tools/bin
-relo use 3.9 --path active/sbin --path-append /opt/fallback/bin
+relo init --path-prepend active/bin --path tools/bin
+relo use 3.9 --path-prepend active/sbin --path /opt/fallback/bin
 ```
 
 Relative paths are resolved against the relo root. Absolute paths are allowed. Symbolic prefixes are supported:
