@@ -78,7 +78,7 @@ impl Config {
             .unwrap_or("relo")
             .to_string();
         let prepend = if path_prepend.is_empty() {
-            vec!["active/bin".to_string()]
+            vec!["active".to_string()]
         } else {
             path_prepend
         };
