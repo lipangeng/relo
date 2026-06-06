@@ -15,7 +15,7 @@ English: [README.md](README.md)
 ├── active -> releases/<version>
 ├── releases/
 ├── home/
-└── relo.toml
+└── relo.yaml
 ```
 
 版本独立 home 模式：
@@ -25,7 +25,7 @@ English: [README.md](README.md)
 ├── active -> releases/<version>
 ├── releases/
 ├── homes/
-└── relo.toml
+└── relo.yaml
 ```
 
 release 目录名必须是 `<semver>` 或 `<semver>_<label>`，例如 `3.9.9`、`3.9.9_arm64`、`1.12.0_darwin-arm64`。版本比较只使用 `_` 前面的语义化版本部分。
@@ -34,9 +34,10 @@ release 目录名必须是 `<semver>` 或 `<semver>_<label>`，例如 `3.9.9`、
 
 ```bash
 relo [-d <dir>] init [--home shared|versioned]
+relo [-d <dir>] init [--path <dir>] [--path-append <dir>]
 relo [-d <dir>] list
 relo [-d <dir>] show [version]
-relo [-d <dir>] use [version]
+relo [-d <dir>] use [--path <dir>] [--path-append <dir>] [version]
 relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
 relo [-d <dir>] use -g <version>
 relo [-d <dir>] print <root|active|release|home|version> [version]
@@ -66,7 +67,7 @@ relo list
 active -> releases/3.9.9
 ```
 
-临时使用某个版本时，`relo use <version>` 会输出 shell export：
+临时使用某个版本时，`relo use <version>` 会输出 shell 脚本：
 
 ```bash
 eval "$(relo use 3.8)"
@@ -104,6 +105,37 @@ relo use --shell powershell 3.8
 relo use --shell cmd 3.8
 ```
 
+## PATH 处理
+
+`relo.yaml` 控制哪些目录加入 `PATH`：
+
+```yaml
+path:
+  prepend:
+    - active/bin
+  append: []
+```
+
+`prepend` 会放在原始 `PATH` 前面，`append` 会放在原始 `PATH` 后面。`--path` 是临时 prepend 的简写：
+
+```bash
+relo init --path active/bin --path-append tools/bin
+relo use 3.9 --path active/sbin --path-append /opt/fallback/bin
+```
+
+相对路径会相对于 relo root 解析，绝对路径会保持原样。支持以下符号前缀：
+
+```text
+active/bin   -> 当前选择的 release/bin
+release/bin  -> 当前选择的 release/bin
+home/bin     -> 当前 home/bin
+root/tools   -> root/tools
+tools/bin    -> root/tools/bin
+/opt/bin     -> /opt/bin
+```
+
+包含 `..` 的相对路径会被拒绝。
+
 ## 版本解析
 
 支持的版本表达式：
@@ -128,73 +160,50 @@ latest
 
 如果只存在 `3.9.9_arm64` 和 `3.9.9_internal`，表达式 `3.9.9` 会报歧义错误，用户需要指定完整 release 名称。
 
-## home 模式
-
-共享 home：
-
-```toml
-home_mode = "shared"
-```
-
-所有版本共用：
-
-```text
-<root>/home
-```
-
-版本独立 home：
-
-```toml
-home_mode = "versioned"
-```
-
-每个版本使用独立目录：
-
-```text
-<root>/homes/<version>
-```
-
-`print home` 只输出路径，不强制创建目录。`use` 会自动创建对应 home 目录。
-
 ## 配置
 
-每个 root 使用自己的 `relo.toml`：
+每个 root 使用自己的 `relo.yaml`：
 
-```toml
-name = "Maven"
-home_mode = "shared"
-version_separator = "_"
-bin = ["active/bin"]
+```yaml
+name: Maven
+home_mode: shared
+version_separator: _
 
-[env]
-MAVEN_HOME = "active"
-MAVEN_USER_HOME = "home"
+path:
+  prepend:
+    - active/bin
+  append: []
+
+env:
+  MAVEN_HOME:
+    path: release
+  MAVEN_USER_HOME:
+    path: home
+  JAVA_OPTS:
+    value: -Xmx1g
+
+releases:
+  - id: 3.9.9
+    path:
+      prepend:
+        - active/sbin
+      append: []
+    env:
+      JAVA_OPTS:
+        value: -Xmx2g
 ```
 
-字段说明：
+`env` 支持两种明确写法：
 
-- `name`：显示名称。
-- `home_mode`：`shared` 或 `versioned`。
-- `version_separator`：版本号和 label 的分隔符，当前只支持 `_`。
-- `bin`：临时 use 时加入 `PATH` 的目录，路径相对于 `<root>`。
-- `[env]`：临时 use 时输出的环境变量映射。
-
-`[env]` 的值可以是：
-
-```text
-root
-active
-release
-home
+```yaml
+env:
+  SOME_PATH:
+    path: home/config
+  SOME_VALUE:
+    value: literal-value
 ```
 
-也可以是相对路径，例如：
-
-```toml
-CONFIG_DIR = "home/config"
-```
-
-输出时会解析为绝对路径。
+版本级 `env` 会覆盖同名全局 `env`。版本级 `path` 会扩展全局 `path`。`relo use -g` 只更新 `active`，临时 `--path` 覆盖只允许用于 local use。
 
 ## 设计边界
 

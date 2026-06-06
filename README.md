@@ -15,7 +15,7 @@ Shared home mode:
 ├── active -> releases/<version>
 ├── releases/
 ├── home/
-└── relo.toml
+└── relo.yaml
 ```
 
 Versioned home mode:
@@ -25,7 +25,7 @@ Versioned home mode:
 ├── active -> releases/<version>
 ├── releases/
 ├── homes/
-└── relo.toml
+└── relo.yaml
 ```
 
 Release directories must be named as `<semver>` or `<semver>_<label>`, for example `3.9.9`, `3.9.9_arm64`, or `1.12.0_darwin-arm64`. Version comparison uses only the semantic version before `_`.
@@ -34,9 +34,10 @@ Release directories must be named as `<semver>` or `<semver>_<label>`, for examp
 
 ```bash
 relo [-d <dir>] init [--home shared|versioned]
+relo [-d <dir>] init [--path <dir>] [--path-append <dir>]
 relo [-d <dir>] list
 relo [-d <dir>] show [version]
-relo [-d <dir>] use [version]
+relo [-d <dir>] use [--path <dir>] [--path-append <dir>] [version]
 relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
 relo [-d <dir>] use -g <version>
 relo [-d <dir>] print <root|active|release|home|version> [version]
@@ -94,6 +95,37 @@ relo use --shell powershell 3.8
 relo use --shell cmd 3.8
 ```
 
+## PATH Handling
+
+`relo.yaml` controls how directories are added to `PATH`:
+
+```yaml
+path:
+  prepend:
+    - active/bin
+  append: []
+```
+
+`prepend` entries are added before the existing `PATH`; `append` entries are added after it. `--path` is a shortcut for a temporary prepend entry:
+
+```bash
+relo init --path active/bin --path-append tools/bin
+relo use 3.9 --path active/sbin --path-append /opt/fallback/bin
+```
+
+Relative paths are resolved against the relo root. Absolute paths are allowed. Symbolic prefixes are supported:
+
+```text
+active/bin   -> selected release/bin
+release/bin  -> selected release/bin
+home/bin     -> selected home/bin
+root/tools   -> root/tools
+tools/bin    -> root/tools/bin
+/opt/bin     -> /opt/bin
+```
+
+Relative paths containing `..` are rejected.
+
 ## Version Resolution
 
 Supported expressions:
@@ -110,17 +142,45 @@ Prefix expressions choose the highest matching semantic version. Exact full dire
 
 ## Configuration
 
-`relo.toml` is local to each root:
+`relo.yaml` is local to each root:
 
-```toml
-name = "Maven"
-home_mode = "shared"
-version_separator = "_"
-bin = ["active/bin"]
+```yaml
+name: Maven
+home_mode: shared
+version_separator: _
 
-[env]
-MAVEN_HOME = "active"
-MAVEN_USER_HOME = "home"
+path:
+  prepend:
+    - active/bin
+  append: []
+
+env:
+  MAVEN_HOME:
+    path: release
+  MAVEN_USER_HOME:
+    path: home
+  JAVA_OPTS:
+    value: -Xmx1g
+
+releases:
+  - id: 3.9.9
+    path:
+      prepend:
+        - active/sbin
+      append: []
+    env:
+      JAVA_OPTS:
+        value: -Xmx2g
 ```
 
-`home_mode` is `shared` or `versioned`. `version_separator` currently supports `_` only.
+`env` values support two explicit forms:
+
+```yaml
+env:
+  SOME_PATH:
+    path: home/config
+  SOME_VALUE:
+    value: literal-value
+```
+
+Release-specific `env` values override global `env` values with the same name. Release-specific `path` entries extend global path entries. `relo use -g` only updates `active`; temporary `--path` overrides are valid only for local use.

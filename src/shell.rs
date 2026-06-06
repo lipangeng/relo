@@ -1,6 +1,5 @@
 use crate::layout::Layout;
 use anyhow::Result;
-use std::path::Path;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShellKind {
@@ -19,15 +18,26 @@ impl ShellKind {
     }
 }
 
-pub fn exports(layout: &Layout, release_id: &str, shell: ShellKind) -> Result<String> {
+pub fn exports(
+    layout: &Layout,
+    release_id: &str,
+    shell: ShellKind,
+    path_prepend: &[String],
+    path_append: &[String],
+) -> Result<String> {
     match shell {
-        ShellKind::Posix => posix_exports(layout, release_id),
-        ShellKind::Powershell => powershell_exports(layout, release_id),
-        ShellKind::Cmd => cmd_exports(layout, release_id),
+        ShellKind::Posix => posix_exports(layout, release_id, path_prepend, path_append),
+        ShellKind::Powershell => powershell_exports(layout, release_id, path_prepend, path_append),
+        ShellKind::Cmd => cmd_exports(layout, release_id, path_prepend, path_append),
     }
 }
 
-fn posix_exports(layout: &Layout, release_id: &str) -> Result<String> {
+fn posix_exports(
+    layout: &Layout,
+    release_id: &str,
+    path_prepend: &[String],
+    path_append: &[String],
+) -> Result<String> {
     let release = layout.release_path(release_id);
     let home = layout.home_for(release_id);
     let mut out = String::new();
@@ -44,26 +54,37 @@ fn posix_exports(layout: &Layout, release_id: &str) -> Result<String> {
         escape_posix(&home.display().to_string())
     ));
 
-    for (name, value) in &layout.config.env {
-        let path = layout.env_path(value, release_id);
-        out.push_str(&format!(
-            "export {name}=\"{}\"\n",
-            escape_posix(&path.display().to_string())
-        ));
+    for (name, value) in layout.effective_env(release_id) {
+        out.push_str(&format!("export {name}=\"{}\"\n", escape_posix(&value)));
     }
 
-    for bin in &layout.config.bin {
-        let bin_path = bin_path(layout, &release, bin);
-        out.push_str(&format!(
-            "export PATH=\"{}:$PATH\"\n",
-            escape_posix(&bin_path.display().to_string())
-        ));
+    let (prepend, append) = layout.effective_path(release_id, path_prepend, path_append);
+    if !prepend.is_empty() {
+        let paths = prepend
+            .iter()
+            .map(|path| escape_posix(&path.display().to_string()))
+            .collect::<Vec<_>>()
+            .join(":");
+        out.push_str(&format!("export PATH=\"{}:$PATH\"\n", paths));
+    }
+    if !append.is_empty() {
+        let paths = append
+            .iter()
+            .map(|path| escape_posix(&path.display().to_string()))
+            .collect::<Vec<_>>()
+            .join(":");
+        out.push_str(&format!("export PATH=\"$PATH:{}\"\n", paths));
     }
 
     Ok(out)
 }
 
-fn powershell_exports(layout: &Layout, release_id: &str) -> Result<String> {
+fn powershell_exports(
+    layout: &Layout,
+    release_id: &str,
+    path_prepend: &[String],
+    path_append: &[String],
+) -> Result<String> {
     let release = layout.release_path(release_id);
     let home = layout.home_for(release_id);
     let mut out = String::new();
@@ -80,26 +101,37 @@ fn powershell_exports(layout: &Layout, release_id: &str) -> Result<String> {
         escape_powershell(&home.display().to_string())
     ));
 
-    for (name, value) in &layout.config.env {
-        let path = layout.env_path(value, release_id);
-        out.push_str(&format!(
-            "$env:{name} = '{}'\n",
-            escape_powershell(&path.display().to_string())
-        ));
+    for (name, value) in layout.effective_env(release_id) {
+        out.push_str(&format!("$env:{name} = '{}'\n", escape_powershell(&value)));
     }
 
-    for bin in &layout.config.bin {
-        let bin_path = bin_path(layout, &release, bin);
-        out.push_str(&format!(
-            "$env:PATH = '{}' + ';' + $env:PATH\n",
-            escape_powershell(&bin_path.display().to_string())
-        ));
+    let (prepend, append) = layout.effective_path(release_id, path_prepend, path_append);
+    if !prepend.is_empty() {
+        let paths = prepend
+            .iter()
+            .map(|path| format!("'{}'", escape_powershell(&path.display().to_string())))
+            .collect::<Vec<_>>()
+            .join(" + ';' + ");
+        out.push_str(&format!("$env:PATH = {} + ';' + $env:PATH\n", paths));
+    }
+    if !append.is_empty() {
+        let paths = append
+            .iter()
+            .map(|path| format!("'{}'", escape_powershell(&path.display().to_string())))
+            .collect::<Vec<_>>()
+            .join(" + ';' + ");
+        out.push_str(&format!("$env:PATH = $env:PATH + ';' + {}\n", paths));
     }
 
     Ok(out)
 }
 
-fn cmd_exports(layout: &Layout, release_id: &str) -> Result<String> {
+fn cmd_exports(
+    layout: &Layout,
+    release_id: &str,
+    path_prepend: &[String],
+    path_append: &[String],
+) -> Result<String> {
     let release = layout.release_path(release_id);
     let home = layout.home_for(release_id);
     let mut out = String::new();
@@ -116,33 +148,29 @@ fn cmd_exports(layout: &Layout, release_id: &str) -> Result<String> {
         escape_cmd(&home.display().to_string())
     ));
 
-    for (name, value) in &layout.config.env {
-        let path = layout.env_path(value, release_id);
-        out.push_str(&format!(
-            "set \"{name}={}\"\n",
-            escape_cmd(&path.display().to_string())
-        ));
+    for (name, value) in layout.effective_env(release_id) {
+        out.push_str(&format!("set \"{name}={}\"\n", escape_cmd(&value)));
     }
 
-    for bin in &layout.config.bin {
-        let bin_path = bin_path(layout, &release, bin);
-        out.push_str(&format!(
-            "set \"PATH={};%PATH%\"\n",
-            escape_cmd(&bin_path.display().to_string())
-        ));
+    let (prepend, append) = layout.effective_path(release_id, path_prepend, path_append);
+    if !prepend.is_empty() {
+        let paths = prepend
+            .iter()
+            .map(|path| escape_cmd(&path.display().to_string()))
+            .collect::<Vec<_>>()
+            .join(";");
+        out.push_str(&format!("set \"PATH={};%PATH%\"\n", paths));
+    }
+    if !append.is_empty() {
+        let paths = append
+            .iter()
+            .map(|path| escape_cmd(&path.display().to_string()))
+            .collect::<Vec<_>>()
+            .join(";");
+        out.push_str(&format!("set \"PATH=%PATH%;{}\"\n", paths));
     }
 
     Ok(out)
-}
-
-fn bin_path(layout: &Layout, release: &Path, bin: &str) -> std::path::PathBuf {
-    // During local use there is no active symlink update, so active/bin
-    // must resolve to the selected release rather than <root>/active/bin.
-    if let Some(rest) = bin.strip_prefix("active/") {
-        release.join(rest)
-    } else {
-        layout.root.join(bin)
-    }
 }
 
 pub fn wrapper(shell: ShellKind) -> &'static str {

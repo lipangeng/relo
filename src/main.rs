@@ -23,7 +23,12 @@ fn run() -> Result<()> {
     let root = std::fs::canonicalize(&cli.dir).unwrap_or(cli.dir);
 
     match cli.command {
-        Command::Init { target, home } => match target {
+        Command::Init {
+            target,
+            home,
+            path_prepend,
+            path_append,
+        } => match target {
             Some(InitTarget::Zsh) | Some(InitTarget::Bash) => {
                 print!("{}", shell::wrapper(ShellKind::Posix));
             }
@@ -35,7 +40,7 @@ fn run() -> Result<()> {
             }
             None => {
                 let mode = home.unwrap_or(HomeArg::Shared).into();
-                Layout::init(&root, mode)?;
+                Layout::init(&root, mode, path_prepend, path_append)?;
             }
         },
         Command::List => {
@@ -84,11 +89,16 @@ fn run() -> Result<()> {
         Command::Use {
             global,
             shell,
+            path_prepend,
+            path_append,
             version,
         } => {
             let layout = Layout::load(root)?;
             if global && version.is_none() {
                 anyhow::bail!("global use requires a version");
+            }
+            if global && (!path_prepend.is_empty() || !path_append.is_empty()) {
+                anyhow::bail!("path overrides are only valid for local use");
             }
             let release = match version {
                 Some(expr) => layout.resolve(&expr)?,
@@ -101,7 +111,10 @@ fn run() -> Result<()> {
                 let shell = shell
                     .map(ShellKind::from)
                     .unwrap_or_else(ShellKind::default_for_platform);
-                print!("{}", shell::exports(&layout, &release.id, shell)?);
+                print!(
+                    "{}",
+                    shell::exports(&layout, &release.id, shell, &path_prepend, &path_append)?
+                );
             }
         }
         Command::Print { target, version } => {

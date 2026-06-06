@@ -1,7 +1,8 @@
-use crate::config::{Config, HomeMode};
+use crate::config::{Config, EnvValue, HomeMode, PathConfig};
 use crate::error::ReloError;
 use crate::version::{parse_release, resolve, Release};
 use anyhow::{Context, Result};
+use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -12,20 +13,25 @@ pub struct Layout {
 }
 
 impl Layout {
-    pub fn init(root: &Path, mode: HomeMode) -> Result<()> {
+    pub fn init(
+        root: &Path,
+        mode: HomeMode,
+        path_prepend: Vec<String>,
+        path_append: Vec<String>,
+    ) -> Result<()> {
         fs::create_dir_all(root).with_context(|| format!("failed to create {}", root.display()))?;
         fs::create_dir_all(root.join("releases"))?;
         match mode {
             HomeMode::Shared => fs::create_dir_all(root.join("home"))?,
             HomeMode::Versioned => fs::create_dir_all(root.join("homes"))?,
         }
-        let config = Config::default_for(root, mode);
-        config.write(&root.join("relo.toml"))?;
+        let config = Config::default_for(root, mode, path_prepend, path_append);
+        config.write(&root.join("relo.yaml"))?;
         Ok(())
     }
 
     pub fn load(root: PathBuf) -> Result<Self> {
-        let config_path = root.join("relo.toml");
+        let config_path = root.join("relo.yaml");
         if !config_path.is_file() {
             return Err(ReloError::NotRoot(root.display().to_string()).into());
         }
@@ -41,7 +47,7 @@ impl Layout {
     }
 
     pub fn config_path(&self) -> PathBuf {
-        self.root.join("relo.toml")
+        self.root.join("relo.yaml")
     }
 
     pub fn active_path(&self) -> PathBuf {
@@ -142,14 +148,81 @@ impl Layout {
         Ok(())
     }
 
-    pub fn env_path(&self, key: &str, release_id: &str) -> PathBuf {
-        // Config env values are symbolic locations first; unknown values are
-        // treated as root-relative paths such as "home/config".
-        match key {
-            "root" => self.root.clone(),
-            "active" | "release" => self.release_path(release_id),
-            "home" => self.home_for(release_id),
-            rel => self.root.join(rel),
+    pub fn effective_env(&self, release_id: &str) -> BTreeMap<String, String> {
+        let mut env = self.config.env.clone();
+        if let Some(release) = self.release_config(release_id) {
+            env.extend(release.env.clone());
+        }
+        env.into_iter()
+            .map(|(name, value)| {
+                let value = match value {
+                    EnvValue::Path { path } => self
+                        .resolve_config_path(&path, release_id)
+                        .display()
+                        .to_string(),
+                    EnvValue::Value { value } => value,
+                };
+                (name, value)
+            })
+            .collect()
+    }
+
+    pub fn effective_path(
+        &self,
+        release_id: &str,
+        use_prepend: &[String],
+        use_append: &[String],
+    ) -> (Vec<PathBuf>, Vec<PathBuf>) {
+        let release_path = self
+            .release_config(release_id)
+            .map(|release| &release.path)
+            .unwrap_or(&EMPTY_PATH_CONFIG);
+
+        let prepend = use_prepend
+            .iter()
+            .chain(release_path.prepend.iter())
+            .chain(self.config.path.prepend.iter())
+            .map(|path| self.resolve_config_path(path, release_id))
+            .collect();
+
+        let append = self
+            .config
+            .path
+            .append
+            .iter()
+            .chain(release_path.append.iter())
+            .chain(use_append.iter())
+            .map(|path| self.resolve_config_path(path, release_id))
+            .collect();
+
+        (prepend, append)
+    }
+
+    fn release_config(&self, release_id: &str) -> Option<&crate::config::ReleaseConfig> {
+        self.config
+            .releases
+            .iter()
+            .find(|release| release.id == release_id)
+    }
+
+    fn resolve_config_path(&self, value: &str, release_id: &str) -> PathBuf {
+        let path = Path::new(value);
+        if path.is_absolute() {
+            return path.to_path_buf();
+        }
+
+        let mut components = path.components();
+        let Some(Component::Normal(first)) = components.next() else {
+            return self.root.join(path);
+        };
+        let rest = components.as_path();
+        match first.to_str() {
+            Some("root") => join_optional_rest(self.root.clone(), rest),
+            Some("active") | Some("release") => {
+                join_optional_rest(self.release_path(release_id), rest)
+            }
+            Some("home") => join_optional_rest(self.home_for(release_id), rest),
+            _ => self.root.join(path),
         }
     }
 
@@ -157,6 +230,11 @@ impl Layout {
         self.active_version().map(|_| ())
     }
 }
+
+static EMPTY_PATH_CONFIG: PathConfig = PathConfig {
+    prepend: Vec::new(),
+    append: Vec::new(),
+};
 
 #[cfg(unix)]
 fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q) -> Result<()> {
@@ -182,5 +260,13 @@ fn active_release_id(target: &Path) -> Result<String> {
                 .ok_or_else(|| ReloError::ActiveInvalidTarget(target.display().to_string()).into())
         }
         _ => Err(ReloError::ActiveInvalidTarget(target.display().to_string()).into()),
+    }
+}
+
+fn join_optional_rest(base: PathBuf, rest: &Path) -> PathBuf {
+    if rest.as_os_str().is_empty() {
+        base
+    } else {
+        base.join(rest)
     }
 }
