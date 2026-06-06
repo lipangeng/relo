@@ -33,11 +33,11 @@ release 目录名必须是 `<semver>` 或 `<semver>_<label>`，例如 `3.9.9`、
 ## 命令
 
 ```bash
-relo [-d <dir>] init [--home shared|versioned]
-relo [-d <dir>] init [--path-prepend <dir>] [--path-append <dir>] [--path <dir>]
+relo [-d <dir>] init [--force] [--home shared|versioned]
+relo [-d <dir>] init [--force] [--path <dir>]
 relo [-d <dir>] list
 relo [-d <dir>] show [version]
-relo [-d <dir>] use [--path-prepend <dir>] [--path-append <dir>] [--path <dir>] [version]
+relo [-d <dir>] use [--path <dir>] [version]
 relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
 relo [-d <dir>] use -g <version>
 relo [-d <dir>] print <root|active|release|home|version> [version]
@@ -66,6 +66,9 @@ mkdir -p releases/3.8.8 releases/3.9.9
 relo use -g 3.9
 relo list
 ```
+
+如果 `relo.yaml` 已存在，`relo init` 默认不会覆盖；需要覆盖时显式传
+`--force`。
 
 `relo use -g <version>` 会更新 `active` 软链接：
 
@@ -117,16 +120,14 @@ relo use --shell cmd 3.8
 
 ```yaml
 path:
-  prepend:
-    - active/bin
-  append: []
+  - active/bin
 ```
 
-`prepend` 会放在原始 `PATH` 前面，`append` 会放在原始 `PATH` 后面。`--path` 是 append 的简写：
+所有 path 条目都会放在原始 `PATH` 前面，确保当前激活的 release 优先。`--path` 用于 local use 的临时前置路径：
 
 ```bash
-relo init --path-prepend active/bin --path tools/bin
-relo use 3.9 --path-prepend active/sbin --path /opt/fallback/bin
+relo init --path active/bin --path tools/bin
+relo use 3.9 --path active/sbin --path /opt/tools/bin
 ```
 
 相对路径会相对于 relo root 解析，绝对路径会保持原样。支持以下符号前缀：
@@ -176,9 +177,7 @@ home_mode: shared
 version_separator: _
 
 path:
-  prepend:
-    - active/bin
-  append: []
+  - active/bin
 
 env:
   MAVEN_HOME:
@@ -191,9 +190,7 @@ env:
 releases:
   - id: 3.9.9
     path:
-      prepend:
-        - active/sbin
-      append: []
+      - active/sbin
     env:
       JAVA_OPTS:
         value: -Xmx2g
@@ -209,7 +206,7 @@ env:
     value: literal-value
 ```
 
-版本级 `env` 会覆盖同名全局 `env`。版本级 `path` 会扩展全局 `path`。`relo use -g` 只更新 `active`，临时 `--path` 覆盖只允许用于 local use。
+版本级 `env` 会覆盖同名全局 `env`。版本级 `path` 会排在全局 `path` 前面。`relo use -g` 只更新 `active`，临时 `--path` 覆盖只允许用于 local use。
 
 ## 设计边界
 

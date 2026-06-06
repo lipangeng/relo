@@ -45,7 +45,7 @@ pub struct Config {
     #[serde(default)]
     pub version_separator: String,
     #[serde(default)]
-    pub path: PathConfig,
+    pub path: Vec<String>,
     #[serde(default)]
     pub env: BTreeMap<String, EnvValue>,
     #[serde(default)]
@@ -53,18 +53,10 @@ pub struct Config {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct PathConfig {
-    #[serde(default)]
-    pub prepend: Vec<String>,
-    #[serde(default)]
-    pub append: Vec<String>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct ReleaseConfig {
     pub id: String,
     #[serde(default)]
-    pub path: PathConfig,
+    pub path: Vec<String>,
     #[serde(default)]
     pub env: BTreeMap<String, EnvValue>,
 }
@@ -80,38 +72,28 @@ const DEFAULT_CONFIG_YAML: &str = r#"name: relo
 home_mode: shared
 version_separator: _
 path:
-  prepend: []
-  append:
-    - active/bin
+  - active/bin
 env: {}
 releases: []
 "#;
 
 impl Config {
-    pub fn default_for(
-        root: &Path,
-        home_mode: HomeMode,
-        path_prepend: Vec<String>,
-        path_append: Vec<String>,
-    ) -> Self {
+    pub fn default_for(root: &Path, home_mode: HomeMode, path: Vec<String>) -> Self {
         let name = root
             .file_name()
             .and_then(|value| value.to_str())
             .unwrap_or("relo")
             .to_string();
-        let append = if path_append.is_empty() {
+        let path = if path.is_empty() {
             vec!["active/bin".to_string()]
         } else {
-            path_append
+            path
         };
         Self {
             name,
             home_mode,
             version_separator: "_".to_string(),
-            path: PathConfig {
-                prepend: path_prepend,
-                append,
-            },
+            path,
             env: BTreeMap::new(),
             releases: Vec::new(),
         }
@@ -202,8 +184,8 @@ fn prune_defaults(value: &mut Value, default: &Value) {
     }
 }
 
-fn validate_path_config(path: &PathConfig) -> Result<()> {
-    for value in path.prepend.iter().chain(path.append.iter()) {
+fn validate_path_config(path: &[String]) -> Result<()> {
+    for value in path {
         validate_path_value(value)?;
     }
     Ok(())

@@ -16,12 +16,12 @@ pub enum Command {
     Init {
         #[arg(value_enum)]
         target: Option<InitTarget>,
+        #[arg(long)]
+        force: bool,
         #[arg(long, value_enum)]
         home: Option<HomeArg>,
-        #[arg(long = "path-prepend")]
-        path_prepend: Vec<String>,
-        #[arg(long = "path-append", alias = "path")]
-        path_append: Vec<String>,
+        #[arg(long = "path")]
+        path: Vec<String>,
     },
     List,
     Show {
@@ -32,10 +32,8 @@ pub enum Command {
         global: bool,
         #[arg(long, value_enum)]
         shell: Option<ShellArg>,
-        #[arg(long = "path-prepend")]
-        path_prepend: Vec<String>,
-        #[arg(long = "path-append", alias = "path")]
-        path_append: Vec<String>,
+        #[arg(long = "path")]
+        path: Vec<String>,
         version: Option<String>,
     },
     Print {

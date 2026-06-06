@@ -33,11 +33,11 @@ Release directories must be named as `<semver>` or `<semver>_<label>`, for examp
 ## Commands
 
 ```bash
-relo [-d <dir>] init [--home shared|versioned]
-relo [-d <dir>] init [--path-prepend <dir>] [--path-append <dir>] [--path <dir>]
+relo [-d <dir>] init [--force] [--home shared|versioned]
+relo [-d <dir>] init [--force] [--path <dir>]
 relo [-d <dir>] list
 relo [-d <dir>] show [version]
-relo [-d <dir>] use [--path-prepend <dir>] [--path-append <dir>] [--path <dir>] [version]
+relo [-d <dir>] use [--path <dir>] [version]
 relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
 relo [-d <dir>] use -g <version>
 relo [-d <dir>] print <root|active|release|home|version> [version]
@@ -66,6 +66,9 @@ mkdir -p releases/3.8.8 releases/3.9.9
 relo use -g 3.9
 relo list
 ```
+
+`relo init` refuses to overwrite an existing `relo.yaml` unless `--force` is
+passed.
 
 Temporary use prints shell exports:
 
@@ -107,16 +110,14 @@ relo use --shell cmd 3.8
 
 ```yaml
 path:
-  prepend:
-    - active/bin
-  append: []
+  - active/bin
 ```
 
-`prepend` entries are added before the existing `PATH`; `append` entries are added after it. `--path` is a shortcut for an append entry:
+All path entries are added before the existing `PATH` so the active release takes precedence. `--path` adds temporary front-of-PATH entries for local use:
 
 ```bash
-relo init --path-prepend active/bin --path tools/bin
-relo use 3.9 --path-prepend active/sbin --path /opt/fallback/bin
+relo init --path active/bin --path tools/bin
+relo use 3.9 --path active/sbin --path /opt/tools/bin
 ```
 
 Relative paths are resolved against the relo root. Absolute paths are allowed. Symbolic prefixes are supported:
@@ -156,9 +157,7 @@ home_mode: shared
 version_separator: _
 
 path:
-  prepend:
-    - active/bin
-  append: []
+  - active/bin
 
 env:
   MAVEN_HOME:
@@ -171,9 +170,7 @@ env:
 releases:
   - id: 3.9.9
     path:
-      prepend:
-        - active/sbin
-      append: []
+      - active/sbin
     env:
       JAVA_OPTS:
         value: -Xmx2g
@@ -189,4 +186,4 @@ env:
     value: literal-value
 ```
 
-Release-specific `env` values override global `env` values with the same name. Release-specific `path` entries extend global path entries. `relo use -g` only updates `active`; temporary `--path` overrides are valid only for local use.
+Release-specific `env` values override global `env` values with the same name. Release-specific `path` entries are added before global path entries. `relo use -g` only updates `active`; temporary `--path` overrides are valid only for local use.

@@ -106,6 +106,33 @@ fn init_creates_shared_layout_and_config() {
 }
 
 #[test]
+fn init_refuses_to_overwrite_existing_config_by_default() {
+    let root = temp_root("init-existing");
+    init(&root);
+    let config_path = root.join("relo.yaml");
+    let original = "name: keep-me\n";
+    fs::write(&config_path, original).unwrap();
+
+    let err = assert_failure(run(&root, &["init", "--home", "versioned"]));
+    assert!(err.contains("relo.yaml already exists"));
+    assert!(err.contains("--force"));
+    assert_eq!(fs::read_to_string(config_path).unwrap(), original);
+}
+
+#[test]
+fn init_force_overwrites_existing_config() {
+    let root = temp_root("init-force");
+    init(&root);
+    fs::write(root.join("relo.yaml"), "name: old\n").unwrap();
+
+    assert_success(run(&root, &["init", "--force", "--home", "versioned"]));
+
+    let config = fs::read_to_string(root.join("relo.yaml")).unwrap();
+    assert!(config.contains("name: relo-init-force-"));
+    assert!(config.contains("home_mode: versioned"));
+}
+
+#[test]
 fn relo_ctx_env_selects_root_when_dir_option_is_omitted() {
     let root = temp_root("env-root");
     assert_success(run_with_relo_ctx(&root, &["init"]));
@@ -140,7 +167,7 @@ fn init_config_uses_runtime_defaults_for_omitted_path() {
     let release = root.join("releases").join("3.9.9");
     let out = assert_success(run(&root, &["use", "--shell", "posix", "3.9"]));
     assert!(out.contains(&format!(
-        "export PATH=\"$PATH:{}\"",
+        "export PATH=\"{}:$PATH\"",
         shell_escape_path(&release.join("bin"))
     )));
 }
@@ -160,25 +187,16 @@ fn init_versioned_creates_homes_layout() {
 }
 
 #[test]
-fn init_accepts_path_prepend_and_append_options() {
+fn init_accepts_path_options() {
     let root = temp_root("init-path");
     assert_success(run(
         &root,
-        &[
-            "init",
-            "--path-prepend",
-            "active/bin",
-            "--path-append",
-            "tools/bin",
-            "--path",
-            "/opt/fallback/bin",
-        ],
+        &["init", "--path", "active/bin", "--path", "tools/bin"],
     ));
 
     let config = fs::read_to_string(root.join("relo.yaml")).unwrap();
     assert!(config.contains("- active/bin"));
     assert!(config.contains("- tools/bin"));
-    assert!(config.contains("- /opt/fallback/bin"));
 }
 
 #[test]
@@ -276,7 +294,7 @@ fn local_use_outputs_shell_exports_without_modifying_active() {
         shell_escape_path(&root.join("home"))
     )));
     assert!(out.contains(&format!(
-        "export PATH=\"$PATH:{}\"",
+        "export PATH=\"{}:$PATH\"",
         shell_escape_path(&release.join("bin"))
     )));
     assert!(!root.join("active").exists());
@@ -292,25 +310,55 @@ fn local_use_accepts_temporary_path_overrides() {
     let release = root.join("releases").join("3.9.9");
     let out = assert_success(run(
         &root,
-        &[
-            "use",
-            "--shell",
-            "posix",
-            "--path-prepend",
-            "active/sbin",
-            "--path",
-            "/opt/fallback/bin",
-            "3.9",
-        ],
+        &["use", "--shell", "posix", "--path", "active/sbin", "3.9"],
     ));
 
     assert!(out.contains(&format!(
-        "export PATH=\"{}:$PATH\"",
-        shell_escape_path(&release.join("sbin"))
-    )));
-    assert!(out.contains(&format!(
-        "export PATH=\"$PATH:{}:/opt/fallback/bin\"",
+        "export PATH=\"{}:{}:$PATH\"",
+        shell_escape_path(&release.join("sbin")),
         shell_escape_path(&release.join("bin"))
+    )));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn later_local_use_takes_path_precedence() {
+    let root = temp_root("use-path-precedence");
+    init(&root);
+    mkdir_release(&root, "8.0.0");
+    mkdir_release(&root, "11.0.0");
+
+    let java8 = root.join("releases").join("8.0.0").join("bin");
+    let java11 = root.join("releases").join("11.0.0").join("bin");
+    let out = assert_success(run(&root, &["use", "--shell", "posix", "11"]));
+
+    assert!(out.contains(&format!(
+        "export PATH=\"{}:$PATH\"",
+        shell_escape_path(&java11)
+    )));
+    assert!(!out.contains(&format!(
+        "export PATH=\"$PATH:{}\"",
+        shell_escape_path(&java11)
+    )));
+    assert!(!out.contains(&shell_escape_path(&java8)));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn config_path_entries_are_prepended() {
+    let root = temp_root("config-path-prepend");
+    init(&root);
+    mkdir_release(&root, "3.9.9");
+    write_config(
+        &root,
+        "name: config-path-prepend\npath:\n  - active/sbin\n  - /opt/tools/bin\n",
+    );
+
+    let release = root.join("releases").join("3.9.9");
+    let out = assert_success(run(&root, &["use", "--shell", "posix", "3.9"]));
+    assert!(out.contains(&format!(
+        "export PATH=\"{}:/opt/tools/bin:$PATH\"",
+        shell_escape_path(&release.join("sbin"))
     )));
 }
 
@@ -321,7 +369,7 @@ fn config_env_supports_path_and_literal_values() {
     mkdir_release(&root, "3.9.9");
     write_config(
         &root,
-        "name: env-path-value\nhome_mode: shared\nversion_separator: _\npath:\n  prepend:\n    - active/bin\n  append: []\nenv:\n  MAVEN_HOME:\n    path: release\n  JAVA_OPTS:\n    value: -Xmx1g\n",
+        "name: env-path-value\nhome_mode: shared\nversion_separator: _\npath:\n  - active/bin\nenv:\n  MAVEN_HOME:\n    path: release\n  JAVA_OPTS:\n    value: -Xmx1g\n",
     );
 
     let release = root.join("releases").join("3.9.9");
@@ -342,18 +390,17 @@ fn release_specific_config_overrides_env_and_extends_path() {
     mkdir_release(&root, "3.9.9");
     write_config(
         &root,
-        "name: release-override\nhome_mode: shared\nversion_separator: _\npath:\n  prepend:\n    - active/bin\n  append:\n    - /opt/global/bin\nenv:\n  JAVA_OPTS:\n    value: -Xmx1g\nreleases:\n  - id: 3.9.9\n    path:\n      prepend:\n        - active/sbin\n      append:\n        - /opt/release/bin\n    env:\n      JAVA_OPTS:\n        value: -Xmx2g\n",
+        "name: release-override\nhome_mode: shared\nversion_separator: _\npath:\n  - active/bin\n  - /opt/global/bin\nenv:\n  JAVA_OPTS:\n    value: -Xmx1g\nreleases:\n  - id: 3.9.9\n    path:\n      - active/sbin\n      - /opt/release/bin\n    env:\n      JAVA_OPTS:\n        value: -Xmx2g\n",
     );
 
     let release = root.join("releases").join("3.9.9");
     let out = assert_success(run(&root, &["use", "--shell", "posix", "3.9"]));
     assert!(out.contains("export JAVA_OPTS=\"-Xmx2g\""));
     assert!(out.contains(&format!(
-        "export PATH=\"{}:{}:$PATH\"",
+        "export PATH=\"{}:/opt/release/bin:{}:/opt/global/bin:$PATH\"",
         shell_escape_path(&release.join("sbin")),
         shell_escape_path(&release.join("bin"))
     )));
-    assert!(out.contains("export PATH=\"$PATH:/opt/global/bin:/opt/release/bin\""));
 }
 
 #[test]
@@ -362,10 +409,7 @@ fn global_use_rejects_temporary_path_overrides() {
     init(&root);
     mkdir_release(&root, "1.0.0");
 
-    let err = assert_failure(run(
-        &root,
-        &["use", "-g", "--path-prepend", "active/sbin", "1.0.0"],
-    ));
+    let err = assert_failure(run(&root, &["use", "-g", "--path", "active/sbin", "1.0.0"]));
     assert!(err.contains("path overrides are only valid for local use"));
 }
 
@@ -414,7 +458,7 @@ fn local_use_can_output_powershell_script() {
         powershell_escape_path(&root.join("home"))
     )));
     assert!(out.contains(&format!(
-        "$env:PATH = $env:PATH + ';' + '{}'",
+        "$env:PATH = '{}' + ';' + $env:PATH",
         powershell_escape_path(&release.join("bin"))
     )));
 }
@@ -434,7 +478,7 @@ fn local_use_can_output_cmd_script() {
         root.join("home").display()
     )));
     assert!(out.contains(&format!(
-        "set \"PATH=%PATH%;{}\"",
+        "set \"PATH={};%PATH%\"",
         release.join("bin").display()
     )));
 }
@@ -510,7 +554,7 @@ fn config_rejects_invalid_shell_env_names() {
     mkdir_release(&root, "1.0.0");
     write_config(
         &root,
-        "name: invalid-env-name\nhome_mode: shared\nversion_separator: _\npath:\n  prepend:\n    - active/bin\n  append: []\nenv:\n  \"BAD; touch /private/tmp/relo-injected; #\":\n    path: home\n",
+        "name: invalid-env-name\nhome_mode: shared\nversion_separator: _\npath:\n  - active/bin\nenv:\n  \"BAD; touch /private/tmp/relo-injected; #\":\n    path: home\n",
     );
 
     let err = assert_failure(run(&root, &["use", "1.0.0"]));
@@ -524,7 +568,7 @@ fn config_rejects_relative_paths_that_escape_root() {
     mkdir_release(&root, "1.0.0");
     write_config(
         &root,
-        "name: escape-path\nhome_mode: shared\nversion_separator: _\npath:\n  prepend:\n    - ../outside/bin\n  append: []\nenv:\n  CONFIG_DIR:\n    path: /tmp/config\n",
+        "name: escape-path\nhome_mode: shared\nversion_separator: _\npath:\n  - ../outside/bin\nenv:\n  CONFIG_DIR:\n    path: /tmp/config\n",
     );
 
     let err = assert_failure(run(&root, &["use", "1.0.0"]));

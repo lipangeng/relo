@@ -22,22 +22,16 @@ pub fn exports(
     layout: &Layout,
     release_id: &str,
     shell: ShellKind,
-    path_prepend: &[String],
-    path_append: &[String],
+    path: &[String],
 ) -> Result<String> {
     match shell {
-        ShellKind::Posix => posix_exports(layout, release_id, path_prepend, path_append),
-        ShellKind::Powershell => powershell_exports(layout, release_id, path_prepend, path_append),
-        ShellKind::Cmd => cmd_exports(layout, release_id, path_prepend, path_append),
+        ShellKind::Posix => posix_exports(layout, release_id, path),
+        ShellKind::Powershell => powershell_exports(layout, release_id, path),
+        ShellKind::Cmd => cmd_exports(layout, release_id, path),
     }
 }
 
-fn posix_exports(
-    layout: &Layout,
-    release_id: &str,
-    path_prepend: &[String],
-    path_append: &[String],
-) -> Result<String> {
+fn posix_exports(layout: &Layout, release_id: &str, path: &[String]) -> Result<String> {
     let release = layout.release_path(release_id);
     let home = layout.home_for(release_id);
     let mut out = String::new();
@@ -58,33 +52,20 @@ fn posix_exports(
         out.push_str(&format!("export {name}=\"{}\"\n", escape_posix(&value)));
     }
 
-    let (prepend, append) = layout.effective_path(release_id, path_prepend, path_append);
-    if !prepend.is_empty() {
-        let paths = prepend
+    let path = layout.effective_path(release_id, path);
+    if !path.is_empty() {
+        let paths = path
             .iter()
             .map(|path| escape_posix(&path.display().to_string()))
             .collect::<Vec<_>>()
             .join(":");
         out.push_str(&format!("export PATH=\"{}:$PATH\"\n", paths));
     }
-    if !append.is_empty() {
-        let paths = append
-            .iter()
-            .map(|path| escape_posix(&path.display().to_string()))
-            .collect::<Vec<_>>()
-            .join(":");
-        out.push_str(&format!("export PATH=\"$PATH:{}\"\n", paths));
-    }
 
     Ok(out)
 }
 
-fn powershell_exports(
-    layout: &Layout,
-    release_id: &str,
-    path_prepend: &[String],
-    path_append: &[String],
-) -> Result<String> {
+fn powershell_exports(layout: &Layout, release_id: &str, path: &[String]) -> Result<String> {
     let release = layout.release_path(release_id);
     let home = layout.home_for(release_id);
     let mut out = String::new();
@@ -105,33 +86,20 @@ fn powershell_exports(
         out.push_str(&format!("$env:{name} = '{}'\n", escape_powershell(&value)));
     }
 
-    let (prepend, append) = layout.effective_path(release_id, path_prepend, path_append);
-    if !prepend.is_empty() {
-        let paths = prepend
+    let path = layout.effective_path(release_id, path);
+    if !path.is_empty() {
+        let paths = path
             .iter()
             .map(|path| format!("'{}'", escape_powershell(&path.display().to_string())))
             .collect::<Vec<_>>()
             .join(" + ';' + ");
         out.push_str(&format!("$env:PATH = {} + ';' + $env:PATH\n", paths));
     }
-    if !append.is_empty() {
-        let paths = append
-            .iter()
-            .map(|path| format!("'{}'", escape_powershell(&path.display().to_string())))
-            .collect::<Vec<_>>()
-            .join(" + ';' + ");
-        out.push_str(&format!("$env:PATH = $env:PATH + ';' + {}\n", paths));
-    }
 
     Ok(out)
 }
 
-fn cmd_exports(
-    layout: &Layout,
-    release_id: &str,
-    path_prepend: &[String],
-    path_append: &[String],
-) -> Result<String> {
+fn cmd_exports(layout: &Layout, release_id: &str, path: &[String]) -> Result<String> {
     let release = layout.release_path(release_id);
     let home = layout.home_for(release_id);
     let mut out = String::new();
@@ -152,22 +120,14 @@ fn cmd_exports(
         out.push_str(&format!("set \"{name}={}\"\n", escape_cmd(&value)));
     }
 
-    let (prepend, append) = layout.effective_path(release_id, path_prepend, path_append);
-    if !prepend.is_empty() {
-        let paths = prepend
+    let path = layout.effective_path(release_id, path);
+    if !path.is_empty() {
+        let paths = path
             .iter()
             .map(|path| escape_cmd(&path.display().to_string()))
             .collect::<Vec<_>>()
             .join(";");
         out.push_str(&format!("set \"PATH={};%PATH%\"\n", paths));
-    }
-    if !append.is_empty() {
-        let paths = append
-            .iter()
-            .map(|path| escape_cmd(&path.display().to_string()))
-            .collect::<Vec<_>>()
-            .join(";");
-        out.push_str(&format!("set \"PATH=%PATH%;{}\"\n", paths));
     }
 
     Ok(out)

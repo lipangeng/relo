@@ -1,4 +1,4 @@
-use crate::config::{Config, EnvValue, HomeMode, PathConfig};
+use crate::config::{Config, EnvValue, HomeMode};
 use crate::error::ReloError;
 use crate::version::{parse_release, resolve, Release};
 use anyhow::{Context, Result};
@@ -13,20 +13,22 @@ pub struct Layout {
 }
 
 impl Layout {
-    pub fn init(
-        root: &Path,
-        mode: HomeMode,
-        path_prepend: Vec<String>,
-        path_append: Vec<String>,
-    ) -> Result<()> {
+    pub fn init(root: &Path, mode: HomeMode, path: Vec<String>, force: bool) -> Result<()> {
+        let config_path = root.join("relo.yaml");
+        if config_path.exists() && !force {
+            anyhow::bail!(
+                "{} already exists; use --force to overwrite it",
+                config_path.display()
+            );
+        }
         fs::create_dir_all(root).with_context(|| format!("failed to create {}", root.display()))?;
         fs::create_dir_all(root.join("releases"))?;
         match mode {
             HomeMode::Shared => fs::create_dir_all(root.join("home"))?,
             HomeMode::Versioned => fs::create_dir_all(root.join("homes"))?,
         }
-        let config = Config::default_for(root, mode, path_prepend, path_append);
-        config.write(&root.join("relo.yaml"))?;
+        let config = Config::default_for(root, mode, path);
+        config.write(&config_path)?;
         Ok(())
     }
 
@@ -167,35 +169,17 @@ impl Layout {
             .collect()
     }
 
-    pub fn effective_path(
-        &self,
-        release_id: &str,
-        use_prepend: &[String],
-        use_append: &[String],
-    ) -> (Vec<PathBuf>, Vec<PathBuf>) {
-        let release_path = self
-            .release_config(release_id)
-            .map(|release| &release.path)
-            .unwrap_or(&EMPTY_PATH_CONFIG);
-
-        let prepend = use_prepend
+    pub fn effective_path(&self, release_id: &str, use_path: &[String]) -> Vec<PathBuf> {
+        use_path
             .iter()
-            .chain(release_path.prepend.iter())
-            .chain(self.config.path.prepend.iter())
+            .chain(
+                self.release_config(release_id)
+                    .into_iter()
+                    .flat_map(|release| release.path.iter()),
+            )
+            .chain(self.config.path.iter())
             .map(|path| self.resolve_config_path(path, release_id))
-            .collect();
-
-        let append = self
-            .config
-            .path
-            .append
-            .iter()
-            .chain(release_path.append.iter())
-            .chain(use_append.iter())
-            .map(|path| self.resolve_config_path(path, release_id))
-            .collect();
-
-        (prepend, append)
+            .collect()
     }
 
     fn release_config(&self, release_id: &str) -> Option<&crate::config::ReleaseConfig> {
@@ -230,11 +214,6 @@ impl Layout {
         self.active_version().map(|_| ())
     }
 }
-
-static EMPTY_PATH_CONFIG: PathConfig = PathConfig {
-    prepend: Vec::new(),
-    append: Vec::new(),
-};
 
 #[cfg(unix)]
 fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q) -> Result<()> {
