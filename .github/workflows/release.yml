@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    name: Build release (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Package Unix binary
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(rustc -vV | sed -n 's/^host: //p')"
+          package="relo-${target}"
+          mkdir -p "dist/${package}" "dist/assets"
+          cp "target/release/relo" "dist/${package}/"
+          cp README.md README.zh-CN.md LICENSE "dist/${package}/"
+          tar -C dist -czf "dist/assets/${package}.tar.gz" "${package}"
+          shasum -a 256 "dist/assets/${package}.tar.gz" > "dist/assets/${package}.tar.gz.sha256"
+
+      - name: Package Windows binary
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $target = (rustc -vV | Select-String '^host: ' | ForEach-Object { $_.ToString().Substring(6) })
+          $package = "relo-$target"
+          New-Item -ItemType Directory -Force -Path "dist/$package", "dist/assets" | Out-Null
+          Copy-Item "target/release/relo.exe" "dist/$package/"
+          Copy-Item README.md, README.zh-CN.md, LICENSE "dist/$package/"
+          Compress-Archive -Path "dist/$package/*" -DestinationPath "dist/assets/$package.zip" -Force
+          $hash = (Get-FileHash "dist/assets/$package.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $package.zip" | Out-File -Encoding ascii "dist/assets/$package.zip.sha256"
+
+      - name: Publish GitHub Release assets
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist/assets/*
+          generate_release_notes: true
