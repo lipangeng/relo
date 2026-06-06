@@ -7,8 +7,9 @@ mod version;
 
 use anyhow::Result;
 use clap::Parser;
-use cli::{Cli, Command, ConfigCommand, HomeArg, InitTarget, PrintTarget};
+use cli::{Cli, Command, ConfigCommand, HomeArg, InitTarget, PrintTarget, ShellArg};
 use layout::Layout;
+use shell::ShellKind;
 
 fn main() {
     if let Err(err) = run() {
@@ -24,7 +25,13 @@ fn run() -> Result<()> {
     match cli.command {
         Command::Init { target, home } => match target {
             Some(InitTarget::Zsh) | Some(InitTarget::Bash) => {
-                print!("{}", shell::wrapper());
+                print!("{}", shell::wrapper(ShellKind::Posix));
+            }
+            Some(InitTarget::Powershell) => {
+                print!("{}", shell::wrapper(ShellKind::Powershell));
+            }
+            Some(InitTarget::Cmd) => {
+                print!("{}", shell::wrapper(ShellKind::Cmd));
             }
             None => {
                 let mode = home.unwrap_or(HomeArg::Shared).into();
@@ -74,7 +81,11 @@ fn run() -> Result<()> {
                 }
             }
         }
-        Command::Use { global, version } => {
+        Command::Use {
+            global,
+            shell,
+            version,
+        } => {
             let layout = Layout::load(root)?;
             if global && version.is_none() {
                 anyhow::bail!("global use requires a version");
@@ -87,7 +98,10 @@ fn run() -> Result<()> {
                 layout.set_active(&release.id)?;
             } else {
                 layout.ensure_home(&release.id)?;
-                print!("{}", shell::exports(&layout, &release.id)?);
+                let shell = shell
+                    .map(ShellKind::from)
+                    .unwrap_or_else(ShellKind::default_for_platform);
+                print!("{}", shell::exports(&layout, &release.id, shell)?);
             }
         }
         Command::Print { target, version } => {
@@ -127,4 +141,14 @@ fn run() -> Result<()> {
     }
 
     Ok(())
+}
+
+impl From<ShellArg> for ShellKind {
+    fn from(value: ShellArg) -> Self {
+        match value {
+            ShellArg::Posix => ShellKind::Posix,
+            ShellArg::Powershell => ShellKind::Powershell,
+            ShellArg::Cmd => ShellKind::Cmd,
+        }
+    }
 }

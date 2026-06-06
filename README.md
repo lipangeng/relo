@@ -37,11 +37,14 @@ relo [-d <dir>] init [--home shared|versioned]
 relo [-d <dir>] list
 relo [-d <dir>] show [version]
 relo [-d <dir>] use [version]
+relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
 relo [-d <dir>] use -g <version>
 relo [-d <dir>] print <root|active|release|home|version> [version]
 relo [-d <dir>] config [show]
 relo init zsh
 relo init bash
+relo init powershell
+relo init cmd
 ```
 
 If `-d` is omitted, `relo` uses the current working directory.
@@ -70,6 +73,26 @@ eval "$(relo init zsh)"
 ```
 
 Add the same line to `.zshrc` or use `relo init bash` for bash.
+
+On Windows, local use defaults to PowerShell output:
+
+```powershell
+Invoke-Expression (relo use 3.8)
+```
+
+Install the PowerShell wrapper to make `relo use <version>` affect the current PowerShell session directly:
+
+```powershell
+Invoke-Expression (relo init powershell)
+```
+
+The default shell output is selected by platform: Windows uses PowerShell, while Linux and macOS use POSIX shell output. You can override it explicitly:
+
+```bash
+relo use --shell posix 3.8
+relo use --shell powershell 3.8
+relo use --shell cmd 3.8
+```
 
 ## Version Resolution
 

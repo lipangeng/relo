@@ -26,6 +26,8 @@ pub enum Command {
     Use {
         #[arg(short = 'g', long = "global")]
         global: bool,
+        #[arg(long, value_enum)]
+        shell: Option<ShellArg>,
         version: Option<String>,
     },
     Print {
@@ -43,6 +45,8 @@ pub enum Command {
 pub enum InitTarget {
     Zsh,
     Bash,
+    Powershell,
+    Cmd,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -63,4 +67,11 @@ pub enum PrintTarget {
 #[derive(Clone, Subcommand)]
 pub enum ConfigCommand {
     Show,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum ShellArg {
+    Posix,
+    Powershell,
+    Cmd,
 }

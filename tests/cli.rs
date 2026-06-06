@@ -70,6 +70,10 @@ fn shell_escape_path(path: &Path) -> String {
         .replace('$', "\\$")
 }
 
+fn powershell_escape_path(path: &Path) -> String {
+    path.display().to_string().replace('\'', "''")
+}
+
 fn append_config(root: &Path, text: &str) {
     use std::io::Write;
 
@@ -188,24 +192,95 @@ fn local_use_outputs_shell_exports_without_modifying_active() {
     init(&root);
     mkdir_release(&root, "3.9.9");
 
-    let out = assert_success(run(&root, &["use", "3.9"]));
+    let out = assert_success(run(&root, &["use", "--shell", "posix", "3.9"]));
+    let release = root.join("releases").join("3.9.9");
     assert!(out.contains(&format!(
         "export RELO_ROOT=\"{}\"",
         shell_escape_path(&root)
     )));
     assert!(out.contains(&format!(
         "export RELO_RELEASE=\"{}\"",
-        shell_escape_path(&root.join("releases/3.9.9"))
+        shell_escape_path(&release)
     )));
     assert!(out.contains(&format!(
         "export RELO_HOME=\"{}\"",
         shell_escape_path(&root.join("home"))
     )));
     assert!(out.contains(&format!(
-        "export PATH=\"{}/bin:$PATH\"",
-        shell_escape_path(&root.join("releases/3.9.9"))
+        "export PATH=\"{}:$PATH\"",
+        shell_escape_path(&release.join("bin"))
     )));
     assert!(!root.join("active").exists());
+}
+
+#[cfg(not(windows))]
+#[test]
+fn local_use_defaults_to_posix_on_non_windows() {
+    let root = temp_root("default-posix");
+    init(&root);
+    mkdir_release(&root, "3.9.9");
+
+    let out = assert_success(run(&root, &["use", "3.9"]));
+    assert!(out.contains("export RELO_ROOT="));
+    assert!(!out.contains("$env:RELO_ROOT"));
+}
+
+#[cfg(windows)]
+#[test]
+fn local_use_defaults_to_powershell_on_windows() {
+    let root = temp_root("default-powershell");
+    init(&root);
+    mkdir_release(&root, "3.9.9");
+
+    let out = assert_success(run(&root, &["use", "3.9"]));
+    assert!(out.contains("$env:RELO_ROOT = '"));
+    assert!(!out.contains("export RELO_ROOT="));
+}
+
+#[test]
+fn local_use_can_output_powershell_script() {
+    let root = temp_root("powershell-use");
+    init(&root);
+    mkdir_release(&root, "3.9.9");
+
+    let release = root.join("releases").join("3.9.9");
+    let out = assert_success(run(&root, &["use", "--shell", "powershell", "3.9"]));
+    assert!(out.contains(&format!(
+        "$env:RELO_ROOT = '{}'",
+        powershell_escape_path(&root)
+    )));
+    assert!(out.contains(&format!(
+        "$env:RELO_RELEASE = '{}'",
+        powershell_escape_path(&release)
+    )));
+    assert!(out.contains(&format!(
+        "$env:RELO_HOME = '{}'",
+        powershell_escape_path(&root.join("home"))
+    )));
+    assert!(out.contains(&format!(
+        "$env:PATH = '{}' + ';' + $env:PATH",
+        powershell_escape_path(&release.join("bin"))
+    )));
+}
+
+#[test]
+fn local_use_can_output_cmd_script() {
+    let root = temp_root("cmd-use");
+    init(&root);
+    mkdir_release(&root, "3.9.9");
+
+    let release = root.join("releases").join("3.9.9");
+    let out = assert_success(run(&root, &["use", "--shell", "cmd", "3.9"]));
+    assert!(out.contains(&format!("set \"RELO_ROOT={}\"", root.display())));
+    assert!(out.contains(&format!("set \"RELO_RELEASE={}\"", release.display())));
+    assert!(out.contains(&format!(
+        "set \"RELO_HOME={}\"",
+        root.join("home").display()
+    )));
+    assert!(out.contains(&format!(
+        "set \"PATH={};%PATH%\"",
+        release.join("bin").display()
+    )));
 }
 
 #[test]
@@ -248,8 +323,27 @@ fn init_shell_generates_wrapper_that_evals_local_use_only() {
     let out = assert_success(run(&root, &["init", "zsh"]));
 
     assert!(out.contains("relo()"));
-    assert!(out.contains("eval \"$(command relo use \"$@\")\""));
+    assert!(out.contains("eval \"$(command relo use --shell posix \"$@\")\""));
     assert!(out.contains("command relo use \"$@\""));
+}
+
+#[test]
+fn init_powershell_generates_wrapper_that_invokes_expression_for_local_use() {
+    let root = temp_root("powershell-wrapper");
+    let out = assert_success(run(&root, &["init", "powershell"]));
+
+    assert!(out.contains("function relo"));
+    assert!(out.contains("Invoke-Expression"));
+    assert!(out.contains("--shell powershell"));
+}
+
+#[test]
+fn init_cmd_generates_wrapper_for_cmd_shell() {
+    let root = temp_root("cmd-wrapper");
+    let out = assert_success(run(&root, &["init", "cmd"]));
+
+    assert!(out.contains("doskey relo="));
+    assert!(out.contains("--shell cmd"));
 }
 
 #[test]

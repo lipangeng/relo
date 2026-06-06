@@ -37,11 +37,14 @@ relo [-d <dir>] init [--home shared|versioned]
 relo [-d <dir>] list
 relo [-d <dir>] show [version]
 relo [-d <dir>] use [version]
+relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
 relo [-d <dir>] use -g <version>
 relo [-d <dir>] print <root|active|release|home|version> [version]
 relo [-d <dir>] config [show]
 relo init zsh
 relo init bash
+relo init powershell
+relo init cmd
 ```
 
 如果不传 `-d`，默认使用当前工作目录。
@@ -79,6 +82,26 @@ bash 用户使用：
 
 ```bash
 eval "$(relo init bash)"
+```
+
+Windows 下，临时使用默认输出 PowerShell 脚本：
+
+```powershell
+Invoke-Expression (relo use 3.8)
+```
+
+也可以安装 PowerShell wrapper，让 `relo use <version>` 直接影响当前 PowerShell 会话：
+
+```powershell
+Invoke-Expression (relo init powershell)
+```
+
+默认 shell 输出会按平台自动选择：Windows 使用 PowerShell，Linux 和 macOS 使用 POSIX shell。也可以显式指定：
+
+```bash
+relo use --shell posix 3.8
+relo use --shell powershell 3.8
+relo use --shell cmd 3.8
 ```
 
 ## 版本解析
