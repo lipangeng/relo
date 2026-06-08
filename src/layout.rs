@@ -1,8 +1,9 @@
-use crate::config::{Config, EnvValue, HomeMode};
+use crate::config::{Config, HomeMode};
 use crate::error::ReloError;
 use crate::version::{parse_release, resolve, Release};
-use anyhow::{Context, Result};
-use std::collections::BTreeMap;
+use anyhow::{bail, Context, Result};
+use indexmap::IndexMap;
+use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -152,26 +153,24 @@ impl Layout {
         Ok(())
     }
 
-    pub fn effective_env(&self, release_id: &str) -> BTreeMap<String, String> {
-        let mut env = self.config.env.clone();
-        if let Some(release) = self.release_config(release_id) {
-            env.extend(release.env.clone());
+    pub fn effective_env(&self, release_id: &str) -> Result<IndexMap<String, String>> {
+        let mut env = IndexMap::new();
+        for (name, value) in &self.config.env {
+            let value = self.expand_variables(value, release_id, &env)?;
+            env.insert(name.clone(), value);
         }
-        env.into_iter()
-            .map(|(name, value)| {
-                let value = match value {
-                    EnvValue::Path { path } => self
-                        .resolve_config_path(&path, release_id)
-                        .display()
-                        .to_string(),
-                    EnvValue::Value { value } => value,
-                };
-                (name, value)
-            })
-            .collect()
+        if let Some(release) = self.release_config(release_id) {
+            for (name, value) in &release.env {
+                let value = self.expand_variables(value, release_id, &env)?;
+                env.shift_remove(name);
+                env.insert(name.clone(), value);
+            }
+        }
+        Ok(env)
     }
 
-    pub fn effective_path(&self, release_id: &str, use_path: &[String]) -> Vec<PathBuf> {
+    pub fn effective_path(&self, release_id: &str, use_path: &[String]) -> Result<Vec<PathBuf>> {
+        let env = self.effective_env(release_id)?;
         use_path
             .iter()
             .chain(
@@ -180,7 +179,10 @@ impl Layout {
                     .flat_map(|release| release.path.iter()),
             )
             .chain(self.config.path.iter())
-            .map(|path| self.resolve_config_path(path, release_id))
+            .map(|path| {
+                self.expand_path_value(path, release_id, &env)
+                    .map(|value| self.resolve_config_path(&value))
+            })
             .collect()
     }
 
@@ -191,29 +193,73 @@ impl Layout {
             .find(|release| release.id == release_id)
     }
 
-    fn resolve_config_path(&self, value: &str, release_id: &str) -> PathBuf {
+    fn resolve_config_path(&self, value: &str) -> PathBuf {
         let path = Path::new(value);
         if path.is_absolute() {
             return path.to_path_buf();
         }
-
-        let mut components = path.components();
-        let Some(Component::Normal(first)) = components.next() else {
-            return self.root.join(path);
-        };
-        let rest = components.as_path();
-        match first.to_str() {
-            Some("root") => join_optional_rest(self.root.clone(), rest),
-            Some("active") | Some("release") => {
-                join_optional_rest(self.release_path(release_id), rest)
-            }
-            Some("home") => join_optional_rest(self.home_for(release_id), rest),
-            _ => self.root.join(path),
-        }
+        self.root.join(path)
     }
 
     fn validate_active(&self) -> Result<()> {
         self.active_version().map(|_| ())
+    }
+
+    fn expand_variables(
+        &self,
+        value: &str,
+        release_id: &str,
+        env: &IndexMap<String, String>,
+    ) -> Result<String> {
+        let expanded = shellexpand::env_with_context(value, |name| {
+            self.lookup_config_value(name, release_id, env)
+        })
+        .map_err(|err| anyhow::anyhow!("failed to expand {value:?}: {err}"))?
+        .into_owned();
+        Ok(shellexpand::tilde(&expanded).into_owned())
+    }
+
+    fn expand_path_value(
+        &self,
+        value: &str,
+        release_id: &str,
+        env: &IndexMap<String, String>,
+    ) -> Result<String> {
+        let expanded = self.expand_variables(value, release_id, env)?;
+        Ok(expanded)
+    }
+
+    fn lookup_config_value(
+        &self,
+        name: &str,
+        release_id: &str,
+        env: &IndexMap<String, String>,
+    ) -> Result<Option<Cow<'static, str>>> {
+        if let Some(name) = name.strip_prefix("relo.") {
+            let value = match name {
+                "root" => self.root.display().to_string(),
+                "release" => self.release_path(release_id).display().to_string(),
+                "home" => self.home_for(release_id).display().to_string(),
+                "version" => release_id.to_string(),
+                _ => bail!("unknown variable: relo.{name}"),
+            };
+            return Ok(Some(Cow::Owned(value)));
+        }
+
+        if let Some(name) = name.strip_prefix("env.") {
+            let Some(value) = env.get(name) else {
+                bail!("unknown variable: env.{name}");
+            };
+            return Ok(Some(Cow::Owned(value.clone())));
+        }
+
+        if let Some(name) = name.strip_prefix("sys.") {
+            let value = std::env::var(name)
+                .with_context(|| format!("unknown system environment variable: sys.{name}"))?;
+            return Ok(Some(Cow::Owned(value)));
+        }
+
+        bail!("unknown variable: {name}");
     }
 }
 
@@ -253,13 +299,5 @@ fn active_release_id(target: &Path) -> Result<String> {
                 .ok_or_else(|| ReloError::ActiveInvalidTarget(target.display().to_string()).into())
         }
         _ => Err(ReloError::ActiveInvalidTarget(target.display().to_string()).into()),
-    }
-}
-
-fn join_optional_rest(base: PathBuf, rest: &Path) -> PathBuf {
-    if rest.as_os_str().is_empty() {
-        base
-    } else {
-        base.join(rest)
     }
 }

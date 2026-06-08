@@ -113,14 +113,14 @@ relo use --shell cmd 3.8
 
 ```yaml
 path:
-  - active/bin
+  - ${relo.release}/bin
 ```
 
 By default, path entries are added before the existing `PATH` so the active release takes precedence. `--path-append` adds them after the existing `PATH` instead. `--path` adds temporary entries for local use:
 
 ```bash
-relo init --path active/bin --path tools/bin
-relo use 3.9 --path active/sbin --path /opt/tools/bin
+relo init --path '${relo.release}/bin' --path tools/bin
+relo use 3.9 --path '${relo.release}/sbin' --path /opt/tools/bin
 relo use 3.9 --path-append
 ```
 
@@ -163,15 +163,13 @@ If values may contain spaces, use a line-preserving loop instead so each
 while IFS= read -r entry; do export "$entry"; done < <(relo print env)
 ```
 
-Relative paths are resolved against the relo root. Absolute paths are allowed. Symbolic prefixes are supported:
+Relative paths are resolved against the relo root. Absolute paths are allowed. Use variables when a path should point at the selected release or home directory:
 
 ```text
-active/bin   -> selected release/bin
-release/bin  -> selected release/bin
-home/bin     -> selected home/bin
-root/tools   -> root/tools
-tools/bin    -> root/tools/bin
-/opt/bin     -> /opt/bin
+${relo.release}/bin  -> selected release/bin
+${relo.home}/bin     -> selected home/bin
+tools/bin            -> root/tools/bin
+/opt/bin             -> /opt/bin
 ```
 
 Relative paths containing `..` are rejected.
@@ -200,33 +198,33 @@ home_mode: shared
 version_separator: _
 
 path:
-  - active/bin
+  - ${relo.release}/bin
 
 env:
-  MAVEN_HOME:
-    path: release
-  MAVEN_USER_HOME:
-    path: home
-  JAVA_OPTS:
-    value: -Xmx1g
+  MAVEN_HOME: ${relo.release}
+  MAVEN_BIN: ${env.MAVEN_HOME}/bin
+  MAVEN_USER_HOME: ${relo.home}
+  JAVA_OPTS: -Xmx1g
 
 releases:
   - id: 3.9.9
     path:
-      - active/sbin
+      - ${env.MAVEN_BIN}
     env:
-      JAVA_OPTS:
-        value: -Xmx2g
+      JAVA_OPTS: -Xmx2g
 ```
 
-`env` values support two explicit forms:
+`env` values are strings. `env` and `path` values support variable expansion:
 
-```yaml
-env:
-  SOME_PATH:
-    path: home/config
-  SOME_VALUE:
-    value: literal-value
+```text
+${relo.root}       relo root directory
+${relo.release}    selected release directory
+${relo.home}       selected home directory
+${relo.version}    selected release id
+${env.NAME}        previously expanded configured env value
+${sys.NAME}        inherited system environment variable
 ```
 
-Release-specific `env` values override global `env` values with the same name. Release-specific `path` entries are added before global path entries. Local `relo use` exports only configured `env` values and `PATH`; it does not inject implicit relo variables. `relo use -g` only updates `active`; temporary `--path` overrides are valid only for local use.
+`env` is expanded in order. Global entries are expanded first; release-specific entries are expanded after them. A later env entry can reference earlier entries through `${env.NAME}`. Release-specific `env` values override global values with the same name for later expansion and final output.
+
+Release-specific `path` entries are added before global path entries. `path` is expanded after env, so it can reference final `${env.NAME}` values. Path entries may be absolute or relative; relative path entries are resolved under the relo root. Leading `~` is expanded to the current user's home directory in both env and path values. Env values are not otherwise treated as paths. Local `relo use` exports only configured `env` values and `PATH`; it does not inject implicit relo variables. `relo use -g` only updates `active`; temporary `--path` overrides are valid only for local use.

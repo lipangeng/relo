@@ -180,13 +180,13 @@ fn run() -> Result<()> {
                 }
                 PrintTarget::Path => {
                     let release = print_release(&layout, version.as_deref())?;
-                    for path in layout.effective_path(&release.id, &[]) {
+                    for path in layout.effective_path(&release.id, &[])? {
                         println!("{}", path.display());
                     }
                 }
                 PrintTarget::Env => {
                     let release = print_release(&layout, version.as_deref())?;
-                    for (name, value) in layout.effective_env(&release.id) {
+                    for (name, value) in layout.effective_env(&release.id)? {
                         println!("{name}={value}");
                     }
                 }

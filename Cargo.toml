@@ -11,3 +11,5 @@ serde = { version = "1", features = ["derive"] }
 serde_yml = "0.0.13"
 anyhow = "1"
 thiserror = "2"
+indexmap = { version = "2", features = ["serde"] }
+shellexpand = "3"

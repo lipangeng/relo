@@ -72,11 +72,11 @@ fn posix_exports(
     append_path: bool,
 ) -> Result<String> {
     let mut out = String::new();
-    for (name, value) in layout.effective_env(release_id) {
+    for (name, value) in layout.effective_env(release_id)? {
         out.push_str(&format!("export {name}=\"{}\"\n", escape_posix(&value)));
     }
 
-    let path = layout.effective_path(release_id, path);
+    let path = layout.effective_path(release_id, path)?;
     if !path.is_empty() {
         let paths = path
             .iter()
@@ -100,11 +100,11 @@ fn powershell_exports(
     append_path: bool,
 ) -> Result<String> {
     let mut out = String::new();
-    for (name, value) in layout.effective_env(release_id) {
+    for (name, value) in layout.effective_env(release_id)? {
         out.push_str(&format!("$env:{name} = '{}'\n", escape_powershell(&value)));
     }
 
-    let path = layout.effective_path(release_id, path);
+    let path = layout.effective_path(release_id, path)?;
     if !path.is_empty() {
         let paths = path
             .iter()
@@ -128,11 +128,11 @@ fn cmd_exports(
     append_path: bool,
 ) -> Result<String> {
     let mut out = String::new();
-    for (name, value) in layout.effective_env(release_id) {
+    for (name, value) in layout.effective_env(release_id)? {
         out.push_str(&format!("set \"{name}={}\"\n", escape_cmd(&value)));
     }
 
-    let path = layout.effective_path(release_id, path);
+    let path = layout.effective_path(release_id, path)?;
     if !path.is_empty() {
         let paths = path
             .iter()

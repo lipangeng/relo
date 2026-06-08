@@ -1,8 +1,8 @@
 use crate::cli::HomeArg;
 use anyhow::{bail, Context, Result};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_yml::Value;
-use std::collections::BTreeMap;
 use std::path::{Component, Path};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -42,7 +42,7 @@ pub struct Config {
     #[serde(default)]
     pub path: Vec<String>,
     #[serde(default)]
-    pub env: BTreeMap<String, EnvValue>,
+    pub env: IndexMap<String, String>,
     #[serde(default)]
     pub releases: Vec<ReleaseConfig>,
 }
@@ -53,21 +53,14 @@ pub struct ReleaseConfig {
     #[serde(default)]
     pub path: Vec<String>,
     #[serde(default)]
-    pub env: BTreeMap<String, EnvValue>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum EnvValue {
-    Path { path: String },
-    Value { value: String },
+    pub env: IndexMap<String, String>,
 }
 
 const DEFAULT_CONFIG_YAML: &str = r#"name: relo
 home_mode: shared
 version_separator: _
 path:
-  - active/bin
+  - ${relo.release}/bin
 env: {}
 releases: []
 "#;
@@ -80,7 +73,7 @@ impl Config {
             .unwrap_or("relo")
             .to_string();
         let path = if path.is_empty() {
-            vec!["active/bin".to_string()]
+            vec!["${relo.release}/bin".to_string()]
         } else {
             path
         };
@@ -89,7 +82,7 @@ impl Config {
             home_mode,
             version_separator: "_".to_string(),
             path,
-            env: BTreeMap::new(),
+            env: IndexMap::new(),
             releases: Vec::new(),
         }
     }
@@ -186,13 +179,10 @@ fn validate_path_config(path: &[String]) -> Result<()> {
     Ok(())
 }
 
-fn validate_env(env: &BTreeMap<String, EnvValue>) -> Result<()> {
-    for (name, value) in env {
+fn validate_env(env: &IndexMap<String, String>) -> Result<()> {
+    for name in env.keys() {
         if !is_valid_env_name(name) {
             bail!("invalid env variable name: {name}");
-        }
-        if let EnvValue::Path { path } = value {
-            validate_path_value(path)?;
         }
     }
     Ok(())

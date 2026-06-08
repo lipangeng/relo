@@ -201,11 +201,17 @@ fn init_accepts_path_options() {
     let root = temp_root("init-path");
     assert_success(run(
         &root,
-        &["init", "--path", "active/bin", "--path", "tools/bin"],
+        &[
+            "init",
+            "--path",
+            "${relo.release}/bin",
+            "--path",
+            "tools/bin",
+        ],
     ));
 
     let config = fs::read_to_string(root.join("relo.yaml")).unwrap();
-    assert!(config.contains("- active/bin"));
+    assert!(config.contains("- ${relo.release}/bin"));
     assert!(config.contains("- tools/bin"));
 }
 
@@ -274,7 +280,7 @@ fn print_path_outputs_effective_paths_one_per_line() {
     mkdir_release(&root, "3.9.9");
     write_config(
         &root,
-        "name: print-path\npath:\n  - active/bin\n  - tools/bin\nreleases:\n  - id: 3.8.8\n    path:\n      - active/sbin\n",
+        "name: print-path\npath:\n  - ${relo.release}/bin\n  - tools/bin\nreleases:\n  - id: 3.8.8\n    path:\n      - ${relo.release}/sbin\n",
     );
 
     let release = root.join("releases").join("3.8.8");
@@ -297,13 +303,66 @@ fn print_env_outputs_effective_env_one_per_line() {
     mkdir_release(&root, "3.9.9");
     write_config(
         &root,
-        "name: print-env\nenv:\n  JAVA_HOME:\n    path: release\n  JAVA_OPTS:\n    value: -Xmx1g\nreleases:\n  - id: 3.8.8\n    env:\n      JAVA_OPTS:\n        value: -Xmx2g\n",
+        "name: print-env\nenv:\n  JAVA_HOME: ${relo.release}\n  JAVA_OPTS: -Xmx1g\nreleases:\n  - id: 3.8.8\n    env:\n      JAVA_OPTS: -Xmx2g\n",
     );
 
     let release = root.join("releases").join("3.8.8");
     assert_eq!(
         assert_success(run(&root, &["print", "env", "--version", "3.8"])),
         format!("JAVA_HOME={}\nJAVA_OPTS=-Xmx2g\n", release.display())
+    );
+}
+
+#[test]
+fn env_expands_in_layer_order_and_path_uses_final_env() {
+    let root = temp_root("env-layer-order");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+    write_config(
+        &root,
+        "name: env-layer-order\nenv:\n  ROOT: ${relo.release}\n  BIN: ${env.ROOT}/bin\nreleases:\n  - id: 1.0.0\n    env:\n      ROOT: ${relo.home}/jdk\n      RELEASE_BIN: ${env.ROOT}/release-bin\n    path:\n      - ${env.ROOT}/tools\n      - ${env.RELEASE_BIN}\n",
+    );
+
+    let release = root.join("releases").join("1.0.0");
+    let home = root.join("home");
+    assert_eq!(
+        assert_success(run(&root, &["print", "env", "--version", "1.0.0"])),
+        format!(
+            "BIN={}\nROOT={}\nRELEASE_BIN={}\n",
+            release.join("bin").display(),
+            home.join("jdk").display(),
+            home.join("jdk").join("release-bin").display()
+        )
+    );
+    assert_eq!(
+        assert_success(run(&root, &["print", "path", "--version", "1.0.0"])),
+        format!(
+            "{}\n{}\n{}\n",
+            home.join("jdk").join("tools").display(),
+            home.join("jdk").join("release-bin").display(),
+            release.join("bin").display()
+        )
+    );
+}
+
+#[test]
+fn env_preserves_literals_while_path_resolves_paths() {
+    let root = temp_root("env-literal-path-resolve");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+    write_config(
+        &root,
+        "name: env-literal-path-resolve\nenv:\n  RELATIVE: tools/bin\n  TILDE: ~/cache\npath:\n  - tools/bin\n",
+    );
+
+    let home_cache = shellexpand::tilde("~/cache").into_owned();
+    assert_eq!(
+        assert_success(run(&root, &["print", "env", "--version", "1.0.0"])),
+        format!("RELATIVE=tools/bin\nTILDE={home_cache}\n")
+    );
+    assert_eq!(
+        assert_success(run(&root, &["print", "path", "--version", "1.0.0"])),
+        format!("{}\n", root.join("tools").join("bin").display())
     );
 }
 
@@ -384,7 +443,14 @@ fn local_use_accepts_temporary_path_overrides() {
     let release = root.join("releases").join("3.9.9");
     let out = assert_success(run(
         &root,
-        &["use", "--shell", "posix", "--path", "active/sbin", "3.9"],
+        &[
+            "use",
+            "--shell",
+            "posix",
+            "--path",
+            "${relo.release}/sbin",
+            "3.9",
+        ],
     ));
 
     assert!(out.contains(&format!(
@@ -467,7 +533,7 @@ fn config_path_entries_are_prepended() {
     mkdir_release(&root, "3.9.9");
     write_config(
         &root,
-        "name: config-path-prepend\npath:\n  - active/sbin\n  - /opt/tools/bin\n",
+        "name: config-path-prepend\npath:\n  - ${relo.release}/sbin\n  - /opt/tools/bin\n",
     );
 
     let release = root.join("releases").join("3.9.9");
@@ -485,7 +551,7 @@ fn config_env_supports_path_and_literal_values() {
     mkdir_release(&root, "3.9.9");
     write_config(
         &root,
-        "name: env-path-value\nhome_mode: shared\nversion_separator: _\npath:\n  - active/bin\nenv:\n  MAVEN_HOME:\n    path: release\n  JAVA_OPTS:\n    value: -Xmx1g\n",
+        "name: env-path-value\nhome_mode: shared\nversion_separator: _\npath:\n  - ${relo.release}/bin\nenv:\n  MAVEN_HOME: ${relo.release}\n  JAVA_OPTS: -Xmx1g\n",
     );
 
     let release = root.join("releases").join("3.9.9");
@@ -505,7 +571,7 @@ fn config_path_and_env_support_yaml_aliases() {
     mkdir_release(&root, "3.9.9");
     write_config(
         &root,
-        "name: yaml-aliases\npath:\n  - &tool_bin active/bin\nenv:\n  TOOL_BIN:\n    path: *tool_bin\n",
+        "name: yaml-aliases\npath:\n  - ${relo.release}/bin\nenv:\n  TOOL_BIN: &tool_bin ${relo.release}/bin\n  TOOL_BIN_COPY: *tool_bin\n",
     );
 
     let bin = root.join("releases").join("3.9.9").join("bin");
@@ -515,6 +581,10 @@ fn config_path_and_env_support_yaml_aliases() {
         shell_escape_path(&bin)
     )));
     assert!(out.contains(&format!("export TOOL_BIN=\"{}\"", shell_escape_path(&bin))));
+    assert!(out.contains(&format!(
+        "export TOOL_BIN_COPY=\"{}\"",
+        shell_escape_path(&bin)
+    )));
 }
 
 #[cfg(not(windows))]
@@ -526,7 +596,7 @@ fn release_specific_config_overrides_env_and_extends_path() {
     mkdir_release(&root, "3.9.9");
     write_config(
         &root,
-        "name: release-override\nhome_mode: shared\nversion_separator: _\npath:\n  - active/bin\n  - /opt/global/bin\nenv:\n  JAVA_OPTS:\n    value: -Xmx1g\nreleases:\n  - id: 3.9.9\n    path:\n      - active/sbin\n      - /opt/release/bin\n    env:\n      JAVA_OPTS:\n        value: -Xmx2g\n",
+        "name: release-override\nhome_mode: shared\nversion_separator: _\npath:\n  - ${relo.release}/bin\n  - /opt/global/bin\nenv:\n  JAVA_OPTS: -Xmx1g\nreleases:\n  - id: 3.9.9\n    path:\n      - ${relo.release}/sbin\n      - /opt/release/bin\n    env:\n      JAVA_OPTS: -Xmx2g\n",
     );
 
     let release = root.join("releases").join("3.9.9");
@@ -545,7 +615,10 @@ fn global_use_rejects_temporary_path_overrides() {
     init(&root);
     mkdir_release(&root, "1.0.0");
 
-    let err = assert_failure(run(&root, &["use", "-g", "--path", "active/sbin", "1.0.0"]));
+    let err = assert_failure(run(
+        &root,
+        &["use", "-g", "--path", "${relo.release}/sbin", "1.0.0"],
+    ));
     assert!(err.contains("path overrides are only valid for local use"));
 }
 
@@ -733,7 +806,7 @@ fn config_rejects_invalid_shell_env_names() {
     mkdir_release(&root, "1.0.0");
     write_config(
         &root,
-        "name: invalid-env-name\nhome_mode: shared\nversion_separator: _\npath:\n  - active/bin\nenv:\n  \"BAD; touch /private/tmp/relo-injected; #\":\n    path: home\n",
+        "name: invalid-env-name\nhome_mode: shared\nversion_separator: _\npath:\n  - ${relo.release}/bin\nenv:\n  \"BAD; touch /private/tmp/relo-injected; #\": home\n",
     );
 
     let err = assert_failure(run(&root, &["use", "1.0.0"]));
@@ -747,7 +820,7 @@ fn config_rejects_relative_paths_that_escape_root() {
     mkdir_release(&root, "1.0.0");
     write_config(
         &root,
-        "name: escape-path\nhome_mode: shared\nversion_separator: _\npath:\n  - ../outside/bin\nenv:\n  CONFIG_DIR:\n    path: /tmp/config\n",
+        "name: escape-path\nhome_mode: shared\nversion_separator: _\npath:\n  - ../outside/bin\nenv:\n  CONFIG_DIR: /tmp/config\n",
     );
 
     let err = assert_failure(run(&root, &["use", "1.0.0"]));
