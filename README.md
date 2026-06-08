@@ -4,7 +4,13 @@
 
 `relo` is Rarely Labs' local release layout manager, short for Release Locator.
 
+It targets a deliberately manual software-management workflow: you already prefer to download, extract, and place SDKs, CLIs, databases, build tools, or other versioned software yourself, but still want a simple way to record versions, switch the active version, and prepare the matching `PATH` and environment variables for a shell.
+
+Package managers and SDK managers can provide fuller install, upgrade, and switching workflows, but they also bring their own default directories, implicit configuration, and state that is not always easy to inspect directly. `relo` is not a replacement for those tools; it is a lightweight, limited-scope helper for users who prefer transparent directory layouts, manual control over installed contents, and a cleaner environment model.
+
 It manages user-provided software release directories. It does not download, install, upgrade, remove, scan contexts, or maintain a registry.
+
+It is suitable for tools such as JDK, Maven, Gradle, Node, Go, protoc, internal CLIs, and versioned binary distributions.
 
 A relo context is one managed software-release directory. `context` is the primary term; `ctx` is the supported short form.
 
