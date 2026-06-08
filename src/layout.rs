@@ -133,7 +133,7 @@ impl Layout {
             if !meta.file_type().is_symlink() {
                 return Err(ReloError::ActiveNotSymlink(active.display().to_string()).into());
             }
-            fs::remove_file(&active)?;
+            remove_active_symlink(&active)?;
         }
         // Store a relative link so a managed root can be moved as a directory.
         create_symlink(Path::new("releases").join(id), active)?;
@@ -223,9 +223,21 @@ fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q) -> Result<()> 
     Ok(())
 }
 
+#[cfg(unix)]
+fn remove_active_symlink(path: &Path) -> Result<()> {
+    fs::remove_file(path)?;
+    Ok(())
+}
+
 #[cfg(windows)]
 fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q) -> Result<()> {
     std::os::windows::fs::symlink_dir(src, dst)?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn remove_active_symlink(path: &Path) -> Result<()> {
+    fs::remove_dir(path)?;
     Ok(())
 }
 

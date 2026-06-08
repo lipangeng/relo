@@ -274,16 +274,17 @@ fn print_path_outputs_effective_paths_one_per_line() {
     mkdir_release(&root, "3.9.9");
     write_config(
         &root,
-        "name: print-path\npath:\n  - active/bin\n  - /opt/global/bin\nreleases:\n  - id: 3.8.8\n    path:\n      - active/sbin\n",
+        "name: print-path\npath:\n  - active/bin\n  - tools/bin\nreleases:\n  - id: 3.8.8\n    path:\n      - active/sbin\n",
     );
 
     let release = root.join("releases").join("3.8.8");
     assert_eq!(
         assert_success(run(&root, &["print", "path", "--version", "3.8"])),
         format!(
-            "{}\n{}\n/opt/global/bin\n",
+            "{}\n{}\n{}\n",
             release.join("sbin").display(),
-            release.join("bin").display()
+            release.join("bin").display(),
+            root.join("tools").join("bin").display()
         )
     );
 }
