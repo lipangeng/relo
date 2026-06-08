@@ -84,6 +84,18 @@ relo use -g 3.9
 relo list
 ```
 
+也可以用下载下来的 `relo` 二进制先初始化一个管理 `relo` 自身的 context，再把这个二进制放进该目录布局里：
+
+```bash
+mkdir -p ~/Documents/30_Toolchain/relo
+./relo -d ~/Documents/30_Toolchain/relo init
+mkdir -p ~/Documents/30_Toolchain/relo/releases/0.1.3/bin
+cp ./relo ~/Documents/30_Toolchain/relo/releases/0.1.3/bin/relo
+~/Documents/30_Toolchain/relo/releases/0.1.3/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.1.3
+```
+
+之后可以把 `~/Documents/30_Toolchain/relo/active/bin` 加入 shell 的 `PATH`，或者直接从这个 active 路径调用 `relo`。
+
 `relo init` 会创建 `releases/`、home 目录和 `relo.yaml`。如果 `relo.yaml` 已存在，默认不会覆盖；需要覆盖时传 `--force`。
 
 如果省略 `version`，`relo use`、`relo print release`、`relo print path`、`relo print env` 等需要 release 上下文的命令会优先选择 active release；如果还没有 active，则选择 `latest`。
