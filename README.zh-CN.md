@@ -37,7 +37,7 @@ relo [-d <dir>] init [--force] [--home shared|versioned]
 relo [-d <dir>] init [--force] [--path <dir>]
 relo [-d <dir>] list
 relo [-d <dir>] show [version]
-relo [-d <dir>] use [--path <dir>] [version]
+relo [-d <dir>] use [-v] [--path <dir>] [--path-append] [version]
 relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
 relo [-d <dir>] use -g [version]
 relo [-d <dir>] print <root|active|release|home|version> [version]
@@ -126,12 +126,16 @@ path:
   - active/bin
 ```
 
-所有 path 条目都会放在原始 `PATH` 前面，确保当前激活的 release 优先。`--path` 用于 local use 的临时前置路径：
+默认情况下，path 条目会放在原始 `PATH` 前面，确保当前激活的 release 优先。传 `--path-append` 时会改为放在原始 `PATH` 后面。`--path` 用于 local use 的临时路径：
 
 ```bash
 relo init --path active/bin --path tools/bin
 relo use 3.9 --path active/sbin --path /opt/tools/bin
+relo use 3.9 --path-append
 ```
+
+传 `-v` 会把选中的版本、release 路径和模式打印到 stderr，不影响 stdout
+输出的 shell 脚本。
 
 相对路径会相对于 relo root 解析，绝对路径会保持原样。支持以下符号前缀：
 

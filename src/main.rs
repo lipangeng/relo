@@ -91,6 +91,8 @@ fn run() -> Result<()> {
             global,
             shell,
             path,
+            path_append,
+            verbose,
             version,
         } => {
             let layout = Layout::load(root)?;
@@ -101,6 +103,11 @@ fn run() -> Result<()> {
                 Some(expr) => layout.resolve(&expr)?,
                 None => layout.default_release()?,
             };
+            if verbose > 0 {
+                eprintln!("version: {}", release.id);
+                eprintln!("release: {}", release.path.display());
+                eprintln!("mode: {}", if global { "global" } else { "local" });
+            }
             if global {
                 layout.set_active(&release.id)?;
             } else {
@@ -108,7 +115,10 @@ fn run() -> Result<()> {
                 let shell = shell
                     .map(ShellKind::from)
                     .unwrap_or_else(ShellKind::default_for_platform);
-                print!("{}", shell::exports(&layout, &release.id, shell, &path)?);
+                print!(
+                    "{}",
+                    shell::exports(&layout, &release.id, shell, &path, path_append)?
+                );
             }
         }
         Command::Print { target, version } => {

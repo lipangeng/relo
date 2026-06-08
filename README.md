@@ -37,7 +37,7 @@ relo [-d <dir>] init [--force] [--home shared|versioned]
 relo [-d <dir>] init [--force] [--path <dir>]
 relo [-d <dir>] list
 relo [-d <dir>] show [version]
-relo [-d <dir>] use [--path <dir>] [version]
+relo [-d <dir>] use [-v] [--path <dir>] [--path-append] [version]
 relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
 relo [-d <dir>] use -g [version]
 relo [-d <dir>] print <root|active|release|home|version> [version]
@@ -116,12 +116,16 @@ path:
   - active/bin
 ```
 
-All path entries are added before the existing `PATH` so the active release takes precedence. `--path` adds temporary front-of-PATH entries for local use:
+By default, path entries are added before the existing `PATH` so the active release takes precedence. `--path-append` adds them after the existing `PATH` instead. `--path` adds temporary entries for local use:
 
 ```bash
 relo init --path active/bin --path tools/bin
 relo use 3.9 --path active/sbin --path /opt/tools/bin
+relo use 3.9 --path-append
 ```
+
+Pass `-v` to print the selected version, release path, and mode to stderr
+without changing the shell script printed to stdout.
 
 Relative paths are resolved against the relo root. Absolute paths are allowed. Symbolic prefixes are supported:
 

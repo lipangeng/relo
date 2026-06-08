@@ -62,6 +62,16 @@ fn assert_failure(output: Output) -> String {
     stderr(&output)
 }
 
+fn assert_success_output(output: Output) -> (String, String) {
+    assert!(
+        output.status.success(),
+        "expected success\nstdout:\n{}\nstderr:\n{}",
+        stdout(&output),
+        stderr(&output)
+    );
+    (stdout(&output), stderr(&output))
+}
+
 fn init(root: &Path) {
     assert_success(run(root, &["init"]));
 }
@@ -313,6 +323,48 @@ fn local_use_accepts_temporary_path_overrides() {
 
 #[cfg(not(windows))]
 #[test]
+fn local_use_can_append_path_entries() {
+    let root = temp_root("use-path-append");
+    init(&root);
+    mkdir_release(&root, "3.9.9");
+
+    let release = root.join("releases").join("3.9.9");
+    let out = assert_success(run(
+        &root,
+        &["use", "--shell", "posix", "--path-append", "3.9"],
+    ));
+
+    assert!(out.contains(&format!(
+        "export PATH=\"$PATH:{}\"",
+        shell_escape_path(&release.join("bin"))
+    )));
+    assert!(!out.contains(&format!(
+        "export PATH=\"{}:$PATH\"",
+        shell_escape_path(&release.join("bin"))
+    )));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn local_use_verbose_reports_selected_version_on_stderr() {
+    let root = temp_root("use-verbose");
+    init(&root);
+    mkdir_release(&root, "3.9.9");
+
+    let release = root.join("releases").join("3.9.9");
+    let output = run(&root, &["use", "-v", "--shell", "posix", "3.9"]);
+    let (out, err) = assert_success_output(output);
+
+    assert!(out.contains(&format!(
+        "export PATH=\"{}:$PATH\"",
+        shell_escape_path(&release.join("bin"))
+    )));
+    assert!(err.contains("version: 3.9.9"));
+    assert!(err.contains(&format!("release: {}", release.display())));
+}
+
+#[cfg(not(windows))]
+#[test]
 fn later_local_use_takes_path_precedence() {
     let root = temp_root("use-path-precedence");
     init(&root);
@@ -468,6 +520,23 @@ fn local_use_can_output_powershell_script() {
 }
 
 #[test]
+fn local_use_can_append_path_entries_in_powershell() {
+    let root = temp_root("powershell-append-path");
+    init(&root);
+    mkdir_release(&root, "3.9.9");
+
+    let release = root.join("releases").join("3.9.9");
+    let out = assert_success(run(
+        &root,
+        &["use", "--shell", "powershell", "--path-append", "3.9"],
+    ));
+    assert!(out.contains(&format!(
+        "$env:PATH = $env:PATH + ';' + '{}'",
+        powershell_escape_path(&release.join("bin"))
+    )));
+}
+
+#[test]
 fn local_use_can_output_cmd_script() {
     let root = temp_root("cmd-use");
     init(&root);
@@ -480,6 +549,23 @@ fn local_use_can_output_cmd_script() {
     assert!(!out.contains("RELO_HOME"));
     assert!(out.contains(&format!(
         "set \"PATH={};%PATH%\"",
+        release.join("bin").display()
+    )));
+}
+
+#[test]
+fn local_use_can_append_path_entries_in_cmd() {
+    let root = temp_root("cmd-append-path");
+    init(&root);
+    mkdir_release(&root, "3.9.9");
+
+    let release = root.join("releases").join("3.9.9");
+    let out = assert_success(run(
+        &root,
+        &["use", "--shell", "cmd", "--path-append", "3.9"],
+    ));
+    assert!(out.contains(&format!(
+        "set \"PATH=%PATH%;{}\"",
         release.join("bin").display()
     )));
 }
@@ -665,4 +751,22 @@ fn global_use_without_version_keeps_active_release() {
         fs::read_link(root.join("active")).unwrap(),
         PathBuf::from("releases/1.0.0")
     );
+}
+
+#[test]
+fn global_use_verbose_reports_selected_version_on_stderr() {
+    let root = temp_root("global-verbose");
+    init(&root);
+    mkdir_release(&root, "3.9.9");
+
+    let output = run(&root, &["use", "-g", "-v", "3.9"]);
+    let (out, err) = assert_success_output(output);
+
+    assert_eq!(out, "");
+    assert!(err.contains("version: 3.9.9"));
+    assert!(err.contains(&format!(
+        "release: {}",
+        root.join("releases").join("3.9.9").display()
+    )));
+    assert!(err.contains("mode: global"));
 }

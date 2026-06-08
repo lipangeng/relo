@@ -34,6 +34,10 @@ pub enum Command {
         shell: Option<ShellArg>,
         #[arg(long = "path")]
         path: Vec<String>,
+        #[arg(long = "path-append")]
+        path_append: bool,
+        #[arg(short = 'v', long = "verbose", action = clap::ArgAction::Count)]
+        verbose: u8,
         version: Option<String>,
     },
     Print {

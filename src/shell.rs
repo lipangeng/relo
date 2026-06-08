@@ -23,15 +23,21 @@ pub fn exports(
     release_id: &str,
     shell: ShellKind,
     path: &[String],
+    append_path: bool,
 ) -> Result<String> {
     match shell {
-        ShellKind::Posix => posix_exports(layout, release_id, path),
-        ShellKind::Powershell => powershell_exports(layout, release_id, path),
-        ShellKind::Cmd => cmd_exports(layout, release_id, path),
+        ShellKind::Posix => posix_exports(layout, release_id, path, append_path),
+        ShellKind::Powershell => powershell_exports(layout, release_id, path, append_path),
+        ShellKind::Cmd => cmd_exports(layout, release_id, path, append_path),
     }
 }
 
-fn posix_exports(layout: &Layout, release_id: &str, path: &[String]) -> Result<String> {
+fn posix_exports(
+    layout: &Layout,
+    release_id: &str,
+    path: &[String],
+    append_path: bool,
+) -> Result<String> {
     let mut out = String::new();
     for (name, value) in layout.effective_env(release_id) {
         out.push_str(&format!("export {name}=\"{}\"\n", escape_posix(&value)));
@@ -44,13 +50,22 @@ fn posix_exports(layout: &Layout, release_id: &str, path: &[String]) -> Result<S
             .map(|path| escape_posix(&path.display().to_string()))
             .collect::<Vec<_>>()
             .join(":");
-        out.push_str(&format!("export PATH=\"{}:$PATH\"\n", paths));
+        if append_path {
+            out.push_str(&format!("export PATH=\"$PATH:{}\"\n", paths));
+        } else {
+            out.push_str(&format!("export PATH=\"{}:$PATH\"\n", paths));
+        }
     }
 
     Ok(out)
 }
 
-fn powershell_exports(layout: &Layout, release_id: &str, path: &[String]) -> Result<String> {
+fn powershell_exports(
+    layout: &Layout,
+    release_id: &str,
+    path: &[String],
+    append_path: bool,
+) -> Result<String> {
     let mut out = String::new();
     for (name, value) in layout.effective_env(release_id) {
         out.push_str(&format!("$env:{name} = '{}'\n", escape_powershell(&value)));
@@ -63,13 +78,22 @@ fn powershell_exports(layout: &Layout, release_id: &str, path: &[String]) -> Res
             .map(|path| format!("'{}'", escape_powershell(&path.display().to_string())))
             .collect::<Vec<_>>()
             .join(" + ';' + ");
-        out.push_str(&format!("$env:PATH = {} + ';' + $env:PATH\n", paths));
+        if append_path {
+            out.push_str(&format!("$env:PATH = $env:PATH + ';' + {}\n", paths));
+        } else {
+            out.push_str(&format!("$env:PATH = {} + ';' + $env:PATH\n", paths));
+        }
     }
 
     Ok(out)
 }
 
-fn cmd_exports(layout: &Layout, release_id: &str, path: &[String]) -> Result<String> {
+fn cmd_exports(
+    layout: &Layout,
+    release_id: &str,
+    path: &[String],
+    append_path: bool,
+) -> Result<String> {
     let mut out = String::new();
     for (name, value) in layout.effective_env(release_id) {
         out.push_str(&format!("set \"{name}={}\"\n", escape_cmd(&value)));
@@ -82,7 +106,11 @@ fn cmd_exports(layout: &Layout, release_id: &str, path: &[String]) -> Result<Str
             .map(|path| escape_cmd(&path.display().to_string()))
             .collect::<Vec<_>>()
             .join(";");
-        out.push_str(&format!("set \"PATH={};%PATH%\"\n", paths));
+        if append_path {
+            out.push_str(&format!("set \"PATH=%PATH%;{}\"\n", paths));
+        } else {
+            out.push_str(&format!("set \"PATH={};%PATH%\"\n", paths));
+        }
     }
 
     Ok(out)
