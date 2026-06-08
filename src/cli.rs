@@ -73,7 +73,8 @@ pub enum HomeArg {
 
 #[derive(Clone, ValueEnum)]
 pub enum PrintTarget {
-    Root,
+    Context,
+    Ctx,
     Active,
     Release,
     Home,
@@ -85,7 +86,8 @@ pub enum PrintTarget {
 impl PrintTarget {
     pub fn as_str(&self) -> &'static str {
         match self {
-            PrintTarget::Root => "root",
+            PrintTarget::Context => "context",
+            PrintTarget::Ctx => "ctx",
             PrintTarget::Active => "active",
             PrintTarget::Release => "release",
             PrintTarget::Home => "home",

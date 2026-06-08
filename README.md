@@ -4,14 +4,16 @@
 
 `relo` is Rarely Labs' local release layout manager, short for Release Locator.
 
-It manages user-provided software release directories. It does not download, install, upgrade, remove, scan roots, or maintain a registry.
+It manages user-provided software release directories. It does not download, install, upgrade, remove, scan contexts, or maintain a registry.
+
+A relo context is one managed software-release directory. `context` is the primary term; `ctx` is the supported short form.
 
 ## Layout
 
 Shared home mode:
 
 ```text
-<root>/
+<context>/
 ├── active -> releases/<version>
 ├── releases/
 ├── home/
@@ -21,7 +23,7 @@ Shared home mode:
 Versioned home mode:
 
 ```text
-<root>/
+<context>/
 ├── active -> releases/<version>
 ├── releases/
 ├── homes/
@@ -40,7 +42,7 @@ relo [-d <dir>] show [version]
 relo [-d <dir>] use [-v] [--path <dir>] [--path-append] [version]
 relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
 relo [-d <dir>] use -g [version]
-relo [-d <dir>] print <root|active|release|home|version|path|env> [--version <version>]
+relo [-d <dir>] print <context|ctx|active|release|home|version|path|env> [--version <version>]
 relo [-d <dir>] config [show]
 relo init zsh
 relo init bash
@@ -48,10 +50,12 @@ relo init powershell
 relo init cmd
 ```
 
-If `-d` is omitted, `relo` uses `RELO_CTX` when it is set, otherwise it uses
-the current working directory. This keeps one-off scripts compact:
+`-d` selects the context directory. If `-d` is omitted, `relo` uses
+`RELO_CONTEXT` when it is set, then `RELO_CTX`, otherwise it uses the current
+working directory. This keeps one-off scripts compact:
 
 ```bash
+RELO_CONTEXT=/opt/relo/maven relo init
 RELO_CTX=/opt/relo/maven relo init
 RELO_CTX=/opt/relo/maven relo use -g 3.9.9
 ```
@@ -163,12 +167,15 @@ If values may contain spaces, use a line-preserving loop instead so each
 while IFS= read -r entry; do export "$entry"; done < <(relo print env)
 ```
 
-Relative paths are resolved against the relo root. Absolute paths are allowed. Use variables when a path should point at the selected release or home directory:
+Relative paths are resolved against the relo context. Absolute paths are allowed. Use variables when a path should point at the selected release, home, active symlink, or context directory:
 
 ```text
 ${relo.release}/bin  -> selected release/bin
 ${relo.home}/bin     -> selected home/bin
-tools/bin            -> root/tools/bin
+${relo.active}/bin   -> active symlink/bin
+${relo.context}/bin  -> context/bin
+${relo.ctx}/bin      -> context/bin
+tools/bin            -> context/tools/bin
 /opt/bin             -> /opt/bin
 ```
 
@@ -190,7 +197,7 @@ Prefix expressions choose the highest matching semantic version. Exact full dire
 
 ## Configuration
 
-`relo.yaml` is local to each root:
+`relo.yaml` is local to each context:
 
 ```yaml
 name: Maven
@@ -217,7 +224,9 @@ releases:
 `env` values are strings. `env` and `path` values support variable expansion:
 
 ```text
-${relo.root}       relo root directory
+${relo.context}    relo context directory
+${relo.ctx}        relo context directory
+${relo.active}     active symlink path
 ${relo.release}    selected release directory
 ${relo.home}       selected home directory
 ${relo.version}    selected release id
@@ -227,4 +236,8 @@ ${sys.NAME}        inherited system environment variable
 
 `env` is expanded in order. Global entries are expanded first; release-specific entries are expanded after them. A later env entry can reference earlier entries through `${env.NAME}`. Release-specific `env` values override global values with the same name for later expansion and final output.
 
-Release-specific `path` entries are added before global path entries. `path` is expanded after env, so it can reference final `${env.NAME}` values. Path entries may be absolute or relative; relative path entries are resolved under the relo root. Leading `~` is expanded to the current user's home directory in both env and path values. Env values are not otherwise treated as paths. Local `relo use` exports only configured `env` values and `PATH`; it does not inject implicit relo variables. `relo use -g` only updates `active`; temporary `--path` overrides are valid only for local use.
+`${relo.root}` is kept as a compatibility alias for `${relo.context}`, but new configuration should use `${relo.context}` or `${relo.ctx}`.
+
+`${relo.active}` is the active symlink path itself, for example `<context>/active`. It is not the resolved release directory; use `${relo.release}` for the selected release directory.
+
+Release-specific `path` entries are added before global path entries. `path` is expanded after env, so it can reference final `${env.NAME}` values. Path entries may be absolute or relative; relative path entries are resolved under the relo context. Leading `~` is expanded to the current user's home directory in both env and path values. Env values are not otherwise treated as paths. Local `relo use` exports only configured `env` values and `PATH`; it does not inject implicit relo variables. `relo use -g` only updates `active`; temporary `--path` overrides are valid only for local use.

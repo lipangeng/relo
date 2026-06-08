@@ -21,7 +21,7 @@ fn main() {
 
 fn run() -> Result<()> {
     let cli = Cli::parse();
-    let root = root_dir(&cli);
+    let root = context_dir(&cli);
 
     match cli.command {
         Command::Init {
@@ -73,7 +73,7 @@ fn run() -> Result<()> {
                 }
                 None => {
                     let active = layout.active_version()?;
-                    println!("root:     {}", layout.root.display());
+                    println!("context:  {}", layout.root.display());
                     println!("active:   {}", active.as_deref().unwrap_or("none"));
                     if let Some(active) = active.as_deref() {
                         println!("release:  {}", layout.release_path(active).display());
@@ -158,7 +158,7 @@ fn run() -> Result<()> {
         Command::Print { target, version } => {
             let layout = Layout::load(root)?;
             match target {
-                PrintTarget::Root => {
+                PrintTarget::Context | PrintTarget::Ctx => {
                     reject_print_version(&target, &version)?;
                     println!("{}", layout.root.display());
                 }
@@ -239,10 +239,15 @@ fn use_forward_args(global: bool, verbose: u8, version: Option<&str>) -> Vec<Str
     args
 }
 
-fn root_dir(cli: &Cli) -> PathBuf {
+fn context_dir(cli: &Cli) -> PathBuf {
     let dir = cli
         .dir
         .clone()
+        .or_else(|| {
+            std::env::var_os("RELO_CONTEXT")
+                .filter(|value| !value.is_empty())
+                .map(PathBuf::from)
+        })
         .or_else(|| {
             std::env::var_os("RELO_CTX")
                 .filter(|value| !value.is_empty())

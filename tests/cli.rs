@@ -34,6 +34,14 @@ fn run_with_relo_ctx(root: &Path, args: &[&str]) -> Output {
         .unwrap()
 }
 
+fn run_with_relo_context(root: &Path, args: &[&str]) -> Output {
+    Command::new(bin())
+        .env("RELO_CONTEXT", root)
+        .args(args)
+        .output()
+        .unwrap()
+}
+
 fn stdout(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).replace('\r', "")
 }
@@ -149,6 +157,31 @@ fn relo_ctx_env_selects_root_when_dir_option_is_omitted() {
 
     assert!(root.join("relo.yaml").is_file());
     assert!(root.join("releases").is_dir());
+}
+
+#[test]
+fn relo_context_env_selects_context_when_dir_option_is_omitted() {
+    let root = temp_root("env-context");
+    assert_success(run_with_relo_context(&root, &["init"]));
+
+    assert!(root.join("relo.yaml").is_file());
+    assert!(root.join("releases").is_dir());
+}
+
+#[test]
+fn relo_context_env_takes_precedence_over_relo_ctx() {
+    let ctx_root = temp_root("env-context-precedence");
+    let legacy_root = temp_root("env-ctx-ignored");
+    let output = Command::new(bin())
+        .env("RELO_CONTEXT", &ctx_root)
+        .env("RELO_CTX", &legacy_root)
+        .arg("init")
+        .output()
+        .unwrap();
+    assert_success(output);
+
+    assert!(ctx_root.join("relo.yaml").is_file());
+    assert!(!legacy_root.join("relo.yaml").exists());
 }
 
 #[test]
@@ -296,6 +329,21 @@ fn print_path_outputs_effective_paths_one_per_line() {
 }
 
 #[test]
+fn print_context_and_ctx_output_context_directory() {
+    let root = temp_root("print-context");
+    init(&root);
+
+    assert_eq!(
+        assert_success(run(&root, &["print", "context"])),
+        format!("{}\n", root.display())
+    );
+    assert_eq!(
+        assert_success(run(&root, &["print", "ctx"])),
+        format!("{}\n", root.display())
+    );
+}
+
+#[test]
 fn print_env_outputs_effective_env_one_per_line() {
     let root = temp_root("print-env");
     init(&root);
@@ -346,6 +394,54 @@ fn env_expands_in_layer_order_and_path_uses_final_env() {
 }
 
 #[test]
+fn config_expands_context_and_ctx_variables() {
+    let root = temp_root("context-vars");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+    write_config(
+        &root,
+        "name: context-vars\nenv:\n  CONTEXT_HOME: ${relo.context}/cache\n  CTX_HOME: ${relo.ctx}/cache\npath:\n  - ${relo.context}/tools\n  - ${relo.ctx}/bin\n",
+    );
+
+    assert_eq!(
+        assert_success(run(&root, &["print", "env", "--version", "1.0.0"])),
+        format!(
+            "CONTEXT_HOME={}\nCTX_HOME={}\n",
+            root.join("cache").display(),
+            root.join("cache").display()
+        )
+    );
+    assert_eq!(
+        assert_success(run(&root, &["print", "path", "--version", "1.0.0"])),
+        format!(
+            "{}\n{}\n",
+            root.join("tools").display(),
+            root.join("bin").display()
+        )
+    );
+}
+
+#[test]
+fn config_expands_active_variable_to_active_symlink_path() {
+    let root = temp_root("active-var");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+    write_config(
+        &root,
+        "name: active-var\nenv:\n  ACTIVE: ${relo.active}\npath:\n  - ${relo.active}/bin\n",
+    );
+
+    assert_eq!(
+        assert_success(run(&root, &["print", "env", "--version", "1.0.0"])),
+        format!("ACTIVE={}\n", root.join("active").display())
+    );
+    assert_eq!(
+        assert_success(run(&root, &["print", "path", "--version", "1.0.0"])),
+        format!("{}\n", root.join("active").join("bin").display())
+    );
+}
+
+#[test]
 fn env_preserves_literals_while_path_resolves_paths() {
     let root = temp_root("env-literal-path-resolve");
     init(&root);
@@ -391,8 +487,8 @@ fn print_rejects_version_for_targets_without_release_context() {
     init(&root);
     mkdir_release(&root, "1.0.0");
 
-    let err = assert_failure(run(&root, &["print", "root", "--version", "1.0.0"]));
-    assert!(err.contains("--version is not valid for print root"));
+    let err = assert_failure(run(&root, &["print", "context", "--version", "1.0.0"]));
+    assert!(err.contains("--version is not valid for print context"));
 }
 
 #[test]
@@ -741,7 +837,7 @@ fn show_and_config_are_human_readable() {
     assert_success(run(&root, &["use", "-g", "3.9"]));
 
     let show = assert_success(run(&root, &["show"]));
-    assert!(show.contains(&format!("root:     {}", root.display())));
+    assert!(show.contains(&format!("context:  {}", root.display())));
     assert!(show.contains("active:   3.9.9"));
     assert!(show.contains("mode:     shared"));
     assert!(show.contains("releases: 1"));
@@ -814,7 +910,7 @@ fn config_rejects_invalid_shell_env_names() {
 }
 
 #[test]
-fn config_rejects_relative_paths_that_escape_root() {
+fn config_rejects_relative_paths_that_escape_context() {
     let root = temp_root("escape-path");
     init(&root);
     mkdir_release(&root, "1.0.0");
@@ -824,7 +920,7 @@ fn config_rejects_relative_paths_that_escape_root() {
     );
 
     let err = assert_failure(run(&root, &["use", "1.0.0"]));
-    assert!(err.contains("relative path must not escape root"));
+    assert!(err.contains("relative path must not escape context"));
 }
 
 #[cfg(unix)]

@@ -136,7 +136,7 @@ impl Layout {
             }
             remove_active_symlink(&active)?;
         }
-        // Store a relative link so a managed root can be moved as a directory.
+        // Store a relative link so a managed context can be moved as a directory.
         create_symlink(Path::new("releases").join(id), active)?;
         Ok(())
     }
@@ -237,7 +237,8 @@ impl Layout {
     ) -> Result<Option<Cow<'static, str>>> {
         if let Some(name) = name.strip_prefix("relo.") {
             let value = match name {
-                "root" => self.root.display().to_string(),
+                "context" | "ctx" | "root" => self.root.display().to_string(),
+                "active" => self.active_path().display().to_string(),
                 "release" => self.release_path(release_id).display().to_string(),
                 "home" => self.home_for(release_id).display().to_string(),
                 "version" => release_id.to_string(),

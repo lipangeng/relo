@@ -2,7 +2,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ReloError {
-    #[error("not a relo root: {0}")]
+    #[error("not a relo context: {0}")]
     NotRoot(String),
     #[error("missing releases directory: {0}")]
     MissingReleases(String),

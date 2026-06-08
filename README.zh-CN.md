@@ -4,7 +4,7 @@ English: [README.md](README.md)
 
 `relo` 是 Rarely Labs 的本地软件 release 布局管理工具，全称是 Release Locator。
 
-它只管理用户已经放到本地目录里的软件版本布局。它不会下载、安装、升级、删除软件，不会扫描根目录，也不会维护 registry。
+它只管理用户已经放到本地目录里的软件版本布局。它不会下载、安装、升级、删除软件，不会扫描 context，也不会维护 registry。
 
 适合用来管理这类工具：JDK、Maven、Gradle、Node、Go、protoc、内部 CLI、按版本分发的二进制工具包。
 
@@ -33,13 +33,13 @@ cargo run -- -d /opt/relo/maven init
 
 ## 核心概念
 
-一个 relo root 是一个独立的软件版本根目录，里面包含 release 目录、配置文件和可选的 active 指针。
+一个 relo context 是一个独立的软件版本管理目录，里面包含 release 目录、配置文件和可选的 active 指针。`context` 是正式术语，`ctx` 是官方缩写。
 
-- `root`：某个工具的管理根目录，例如 `/opt/relo/maven`。
+- `context`：某个工具的管理目录，例如 `/opt/relo/maven`。
 - `releases/`：用户自己放置 release 的目录，`relo` 不负责下载或解压。
 - `active`：指向当前全局激活 release 的符号链接。
 - `home` / `homes/`：给工具使用的持久化 home 目录。
-- `relo.yaml`：该 root 的本地配置文件。
+- `relo.yaml`：该 context 的本地配置文件。
 
 `relo use -g <version>` 只更新 `active`。`relo use <version>` 默认只输出 shell 脚本，用于临时修改当前 shell 的环境变量和 `PATH`。
 
@@ -48,7 +48,7 @@ cargo run -- -d /opt/relo/maven init
 共享 home 模式：
 
 ```text
-<root>/
+<context>/
 ├── active -> releases/<version>
 ├── releases/
 ├── home/
@@ -58,14 +58,14 @@ cargo run -- -d /opt/relo/maven init
 版本独立 home 模式：
 
 ```text
-<root>/
+<context>/
 ├── active -> releases/<version>
 ├── releases/
 ├── homes/
 └── relo.yaml
 ```
 
-共享 home 模式下，所有 release 共用 `<root>/home`。版本独立 home 模式下，每个 release 使用 `<root>/homes/<version>`。
+共享 home 模式下，所有 release 共用 `<context>/home`。版本独立 home 模式下，每个 release 使用 `<context>/homes/<version>`。
 
 release 目录名必须是 `<semver>` 或 `<semver>_<label>`，例如 `3.9.9`、`3.9.9_arm64`、`1.12.0_darwin-arm64`。版本比较只使用 `_` 前面的语义化版本部分。
 
@@ -94,7 +94,7 @@ relo [-d <dir>] show [version]
 relo [-d <dir>] use [-v] [--path <dir>] [--path-append] [version]
 relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
 relo [-d <dir>] use -g [version]
-relo [-d <dir>] print <root|active|release|home|version|path|env> [--version <version>]
+relo [-d <dir>] print <context|ctx|active|release|home|version|path|env> [--version <version>]
 relo [-d <dir>] config [show]
 relo init zsh
 relo init bash
@@ -102,18 +102,19 @@ relo init powershell
 relo init cmd
 ```
 
-如果不传 `-d`，`relo` 会优先使用 `RELO_CTX` 环境变量，未设置时才使用当前工作目录。这能让一次性脚本更简洁：
+`-d` 用来选择 context 目录。如果不传 `-d`，`relo` 会优先使用 `RELO_CONTEXT`，其次使用 `RELO_CTX`，都未设置时才使用当前工作目录。这能让一次性脚本更简洁：
 
 ```bash
+RELO_CONTEXT=/opt/relo/maven relo init
 RELO_CTX=/opt/relo/maven relo init
 RELO_CTX=/opt/relo/maven relo use -g 3.9.9
 ```
 
-`-d` 的优先级高于 `RELO_CTX`。
+`-d` 的优先级高于 `RELO_CONTEXT` 和 `RELO_CTX`。
 
 ## 常见工作流
 
-创建 root 并使用共享 home：
+创建 context 并使用共享 home：
 
 ```bash
 relo -d /opt/relo/maven init
@@ -129,7 +130,7 @@ mkdir -p /opt/relo/jdk/releases/21.0.2_darwin-arm64
 relo -d /opt/relo/jdk use -g 21
 ```
 
-查看当前 root 状态：
+查看当前 context 状态：
 
 ```bash
 relo show
@@ -237,12 +238,15 @@ export $(relo print env | xargs)
 while IFS= read -r entry; do export "$entry"; done < <(relo print env)
 ```
 
-相对路径相对于 relo root 解析。绝对路径保持原样。当路径应指向选中的 release 或 home 目录时，使用变量：
+相对路径相对于 relo context 解析。绝对路径保持原样。当路径应指向选中的 release、home、active 符号链接或 context 目录时，使用变量：
 
 ```text
 ${relo.release}/bin  -> 选中的 release/bin
 ${relo.home}/bin     -> 选中的 home/bin
-tools/bin            -> root/tools/bin
+${relo.active}/bin   -> active 符号链接/bin
+${relo.context}/bin  -> context/bin
+${relo.ctx}/bin      -> context/bin
+tools/bin            -> context/tools/bin
 /opt/bin             -> /opt/bin
 ```
 
@@ -270,7 +274,7 @@ latest
 
 ## 配置
 
-每个 root 使用自己的 `relo.yaml`：
+每个 context 使用自己的 `relo.yaml`：
 
 ```yaml
 name: Maven
@@ -299,7 +303,9 @@ releases:
 `env` 的值都是字符串。`env` 和 `path` 的值支持变量展开：
 
 ```text
-${relo.root}       relo 根目录
+${relo.context}    relo context 目录
+${relo.ctx}        relo context 目录
+${relo.active}     active 符号链接路径
 ${relo.release}    选中的 release 目录
 ${relo.home}       选中的 home 目录
 ${relo.version}    选中的 release id
@@ -309,27 +315,31 @@ ${sys.NAME}        继承的系统环境变量
 
 `env` 按顺序展开。先展开全局条目，再展开 release 专属条目。后面的 env 条目可以通过 `${env.NAME}` 引用前面的条目。Release 专属的 `env` 值会覆盖同名的全局值，影响后续展开和最终输出。
 
-Release 专属的 `path` 条目排在全局 path 条目之前。`path` 在 env 展开之后展开，因此可以引用最终的 `${env.NAME}` 值。路径条目可以是绝对路径或相对路径；相对路径在 relo root 下解析。开头的 `~` 会展开为当前用户的主目录，env 和 path 值中都支持。Env 值不会被视为路径处理。Local `relo use` 只导出配置中的 `env` 值和 `PATH`，不会隐式注入 relo 内部变量。`relo use -g` 只更新 `active`；临时 `--path` 覆盖仅在 local use 时有效。
+`${relo.root}` 作为 `${relo.context}` 的兼容别名保留，但新配置应使用 `${relo.context}` 或 `${relo.ctx}`。
+
+`${relo.active}` 表示 active 符号链接路径本身，例如 `<context>/active`。它不是解析后的 release 目录；选中 release 的真实目录应使用 `${relo.release}`。
+
+Release 专属的 `path` 条目排在全局 path 条目之前。`path` 在 env 展开之后展开，因此可以引用最终的 `${env.NAME}` 值。路径条目可以是绝对路径或相对路径；相对路径在 relo context 下解析。开头的 `~` 会展开为当前用户的主目录，env 和 path 值中都支持。Env 值不会被视为路径处理。Local `relo use` 只导出配置中的 `env` 值和 `PATH`，不会隐式注入 relo 内部变量。`relo use -g` 只更新 `active`；临时 `--path` 覆盖仅在 local use 时有效。
 
 ## 命令说明
 
-`init` 初始化 root。默认使用共享 home；传 `--home versioned` 可改为版本独立 home；传多个 `--path` 可设置初始 path 配置。
+`init` 初始化 context。默认使用共享 home；传 `--home versioned` 可改为版本独立 home；传多个 `--path` 可设置初始 path 配置。
 
 `list` 列出 `releases/` 下的 release。当前 active release 前面显示 `*`，无效 release 目录前面显示 `!`。
 
-`show` 不带版本时显示 root、active、release、home、home mode 和 release 数量；带版本时显示该版本的 release 路径、home 路径和是否 active。
+`show` 不带版本时显示 context、active、release、home、home mode 和 release 数量；带版本时显示该版本的 release 路径、home 路径和是否 active。
 
 `use -g` 更新 `active` 符号链接，不输出 shell export。`use` 不带 `-g` 时输出当前 shell 可执行的环境变量脚本，并在需要时创建对应 home 目录。
 
-`print` 面向脚本使用，只输出单一目标内容。`root` 和 `active` 不接受 `--version`；`release`、`home`、`version`、`path`、`env` 可以通过 `--version` 指定版本。
+`print` 面向脚本使用，只输出单一目标内容。`context`、`ctx` 和 `active` 不接受 `--version`；`release`、`home`、`version`、`path`、`env` 可以通过 `--version` 指定版本。
 
-`config show` 输出当前 root 的 `relo.yaml` 原文。
+`config show` 输出当前 context 的 `relo.yaml` 原文。
 
 ## 排错
 
-`not a relo root`：当前目录、`RELO_CTX` 或 `-d` 指向的目录里没有 `relo.yaml`。
+`not a relo context`：当前目录、`RELO_CONTEXT`、`RELO_CTX` 或 `-d` 指向的目录里没有 `relo.yaml`。
 
-`missing releases directory`：root 里缺少 `releases/` 目录。通常应重新运行 `relo init` 或手动补齐目录。
+`missing releases directory`：context 里缺少 `releases/` 目录。通常应重新运行 `relo init` 或手动补齐目录。
 
 `active exists but is not a symlink`：`active` 已存在但不是 relo 管理的符号链接。为了避免覆盖用户文件，`relo` 会拒绝继续。
 

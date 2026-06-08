@@ -205,7 +205,7 @@ fn validate_path_value(value: &str) -> Result<()> {
         match component {
             Component::Normal(_) | Component::RootDir | Component::Prefix(_) => {}
             Component::CurDir | Component::ParentDir => {
-                bail!("relative path must not escape root: {value}")
+                bail!("relative path must not escape context: {value}")
             }
         }
     }
