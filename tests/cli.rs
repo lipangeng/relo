@@ -207,11 +207,11 @@ fn init_config_uses_runtime_defaults_for_omitted_path() {
     init(&root);
     mkdir_release(&root, "3.9.9");
 
-    let release = root.join("releases").join("3.9.9");
+    let active = root.join("active");
     let out = assert_success(run(&root, &["use", "--shell", "posix", "3.9"]));
     assert!(out.contains(&format!(
         "export PATH=\"{}:$PATH\"",
-        shell_escape_path(&release.join("bin"))
+        shell_escape_path(&active.join("bin"))
     )));
 }
 
@@ -388,7 +388,7 @@ fn env_expands_in_layer_order_and_path_uses_final_env() {
             "{}\n{}\n{}\n",
             home.join("jdk").join("tools").display(),
             home.join("jdk").join("release-bin").display(),
-            release.join("bin").display()
+            root.join("active").join("bin").display()
         )
     );
 }
@@ -472,13 +472,13 @@ fn print_path_without_version_prefers_active_then_latest() {
 
     assert_eq!(
         assert_success(run(&root, &["print", "path"])),
-        format!("{}\n", root.join("releases/2.0.0/bin").display())
+        format!("{}\n", root.join("active/bin").display())
     );
 
     assert_success(run(&root, &["use", "-g", "1.0.0"]));
     assert_eq!(
         assert_success(run(&root, &["print", "path"])),
-        format!("{}\n", root.join("releases/1.0.0/bin").display())
+        format!("{}\n", root.join("active/bin").display())
     );
 }
 
@@ -519,13 +519,13 @@ fn local_use_outputs_shell_exports_without_modifying_active() {
     mkdir_release(&root, "3.9.9");
 
     let out = assert_success(run(&root, &["use", "--shell", "posix", "3.9"]));
-    let release = root.join("releases").join("3.9.9");
+    let active = root.join("active");
     assert!(!out.contains("RELO_ROOT"));
     assert!(!out.contains("RELO_RELEASE"));
     assert!(!out.contains("RELO_HOME"));
     assert!(out.contains(&format!(
         "export PATH=\"{}:$PATH\"",
-        shell_escape_path(&release.join("bin"))
+        shell_escape_path(&active.join("bin"))
     )));
     assert!(!root.join("active").exists());
 }
@@ -553,7 +553,7 @@ fn local_use_accepts_temporary_path_overrides() {
     assert!(out.contains(&format!(
         "export PATH=\"{}:{}:$PATH\"",
         shell_escape_path(&release.join("sbin")),
-        shell_escape_path(&release.join("bin"))
+        shell_escape_path(&root.join("active").join("bin"))
     )));
 }
 
@@ -564,7 +564,7 @@ fn local_use_can_append_path_entries() {
     init(&root);
     mkdir_release(&root, "3.9.9");
 
-    let release = root.join("releases").join("3.9.9");
+    let active = root.join("active");
     let out = assert_success(run(
         &root,
         &["use", "--shell", "posix", "--path-append", "3.9"],
@@ -572,11 +572,11 @@ fn local_use_can_append_path_entries() {
 
     assert!(out.contains(&format!(
         "export PATH=\"$PATH:{}\"",
-        shell_escape_path(&release.join("bin"))
+        shell_escape_path(&active.join("bin"))
     )));
     assert!(!out.contains(&format!(
         "export PATH=\"{}:$PATH\"",
-        shell_escape_path(&release.join("bin"))
+        shell_escape_path(&active.join("bin"))
     )));
 }
 
@@ -615,16 +615,16 @@ fn later_local_use_takes_path_precedence() {
     mkdir_release(&root, "11.0.0");
 
     let java8 = root.join("releases").join("8.0.0").join("bin");
-    let java11 = root.join("releases").join("11.0.0").join("bin");
+    let active = root.join("active").join("bin");
     let out = assert_success(run(&root, &["use", "--shell", "posix", "11"]));
 
     assert!(out.contains(&format!(
         "export PATH=\"{}:$PATH\"",
-        shell_escape_path(&java11)
+        shell_escape_path(&active)
     )));
     assert!(!out.contains(&format!(
         "export PATH=\"$PATH:{}\"",
-        shell_escape_path(&java11)
+        shell_escape_path(&active)
     )));
     assert!(!out.contains(&shell_escape_path(&java8)));
 }
@@ -758,14 +758,14 @@ fn local_use_can_output_powershell_script() {
     init(&root);
     mkdir_release(&root, "3.9.9");
 
-    let release = root.join("releases").join("3.9.9");
+    let active = root.join("active");
     let out = assert_success(run(&root, &["use", "--shell", "powershell", "3.9"]));
     assert!(!out.contains("$env:RELO_ROOT"));
     assert!(!out.contains("$env:RELO_RELEASE"));
     assert!(!out.contains("$env:RELO_HOME"));
     assert!(out.contains(&format!(
         "$env:PATH = '{}' + ';' + $env:PATH",
-        powershell_escape_path(&release.join("bin"))
+        powershell_escape_path(&active.join("bin"))
     )));
 }
 
@@ -775,14 +775,14 @@ fn local_use_can_append_path_entries_in_powershell() {
     init(&root);
     mkdir_release(&root, "3.9.9");
 
-    let release = root.join("releases").join("3.9.9");
+    let active = root.join("active");
     let out = assert_success(run(
         &root,
         &["use", "--shell", "powershell", "--path-append", "3.9"],
     ));
     assert!(out.contains(&format!(
         "$env:PATH = $env:PATH + ';' + '{}'",
-        powershell_escape_path(&release.join("bin"))
+        powershell_escape_path(&active.join("bin"))
     )));
 }
 
@@ -792,14 +792,14 @@ fn local_use_can_output_cmd_script() {
     init(&root);
     mkdir_release(&root, "3.9.9");
 
-    let release = root.join("releases").join("3.9.9");
+    let active = root.join("active");
     let out = assert_success(run(&root, &["use", "--shell", "cmd", "3.9"]));
     assert!(!out.contains("RELO_ROOT"));
     assert!(!out.contains("RELO_RELEASE"));
     assert!(!out.contains("RELO_HOME"));
     assert!(out.contains(&format!(
         "set \"PATH={};%PATH%\"",
-        release.join("bin").display()
+        active.join("bin").display()
     )));
 }
 
@@ -809,14 +809,14 @@ fn local_use_can_append_path_entries_in_cmd() {
     init(&root);
     mkdir_release(&root, "3.9.9");
 
-    let release = root.join("releases").join("3.9.9");
+    let active = root.join("active");
     let out = assert_success(run(
         &root,
         &["use", "--shell", "cmd", "--path-append", "3.9"],
     ));
     assert!(out.contains(&format!(
         "set \"PATH=%PATH%;{}\"",
-        release.join("bin").display()
+        active.join("bin").display()
     )));
 }
 
@@ -962,11 +962,11 @@ fn local_use_without_version_uses_latest_release() {
     mkdir_release(&root, "1.0.0");
     mkdir_release(&root, "2.0.0");
 
-    let release = root.join("releases").join("2.0.0");
+    let active = root.join("active");
     let out = assert_success(run(&root, &["use", "--shell", "posix"]));
     assert!(out.contains(&format!(
         "export PATH=\"{}:$PATH\"",
-        shell_escape_path(&release.join("bin"))
+        shell_escape_path(&active.join("bin"))
     )));
     assert!(!root.join("active").exists());
 }
@@ -979,11 +979,11 @@ fn local_use_without_version_prefers_active_release() {
     mkdir_release(&root, "2.0.0");
     assert_success(run(&root, &["use", "-g", "1.0.0"]));
 
-    let release = root.join("releases").join("1.0.0");
+    let active = root.join("active");
     let out = assert_success(run(&root, &["use", "--shell", "posix"]));
     assert!(out.contains(&format!(
         "export PATH=\"{}:$PATH\"",
-        shell_escape_path(&release.join("bin"))
+        shell_escape_path(&active.join("bin"))
     )));
     assert!(!out.contains(&shell_escape_path(
         &root.join("releases").join("2.0.0").join("bin")

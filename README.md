@@ -117,7 +117,7 @@ relo use --shell cmd 3.8
 
 ```yaml
 path:
-  - ${relo.release}/bin
+  - ${relo.active}/bin
 ```
 
 By default, path entries are added before the existing `PATH` so the active release takes precedence. `--path-append` adds them after the existing `PATH` instead. `--path` adds temporary entries for local use:
@@ -206,7 +206,7 @@ home_mode: shared
 version_separator: _
 
 path:
-  - ${relo.release}/bin
+  - ${relo.active}/bin
 
 env:
   MAVEN_HOME: ${relo.release}

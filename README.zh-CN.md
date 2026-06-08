@@ -194,7 +194,7 @@ eval "$(relo use -v 3.9)"
 
 ```yaml
 path:
-  - ${relo.release}/bin
+  - ${relo.active}/bin
 ```
 
 默认情况下，path 条目会放在现有 `PATH` 前面，确保当前选择的 release 优先。`--path-append` 改为放在现有 `PATH` 后面。`--path` 用于 local use 的临时路径：
@@ -282,7 +282,7 @@ home_mode: shared
 version_separator: _
 
 path:
-  - ${relo.release}/bin
+  - ${relo.active}/bin
 
 env:
   MAVEN_HOME: ${relo.release}
@@ -298,7 +298,7 @@ releases:
       JAVA_OPTS: -Xmx2g
 ```
 
-`relo init` 写出的配置会省略默认值；读取时仍会合并默认配置。默认 `path` 是 `${relo.release}/bin`，默认 `home_mode` 是 `shared`，默认 `version_separator` 是 `_`。
+`relo init` 写出的配置会省略默认值；读取时仍会合并默认配置。默认 `path` 是 `${relo.active}/bin`，默认 `home_mode` 是 `shared`，默认 `version_separator` 是 `_`。
 
 `env` 的值都是字符串。`env` 和 `path` 的值支持变量展开：
 

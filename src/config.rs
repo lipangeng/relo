@@ -60,7 +60,7 @@ const DEFAULT_CONFIG_YAML: &str = r#"name: relo
 home_mode: shared
 version_separator: _
 path:
-  - ${relo.release}/bin
+  - ${relo.active}/bin
 env: {}
 releases: []
 "#;
@@ -73,7 +73,7 @@ impl Config {
             .unwrap_or("relo")
             .to_string();
         let path = if path.is_empty() {
-            vec!["${relo.release}/bin".to_string()]
+            vec!["${relo.active}/bin".to_string()]
         } else {
             path
         };
