@@ -281,18 +281,9 @@ fn local_use_outputs_shell_exports_without_modifying_active() {
 
     let out = assert_success(run(&root, &["use", "--shell", "posix", "3.9"]));
     let release = root.join("releases").join("3.9.9");
-    assert!(out.contains(&format!(
-        "export RELO_ROOT=\"{}\"",
-        shell_escape_path(&root)
-    )));
-    assert!(out.contains(&format!(
-        "export RELO_RELEASE=\"{}\"",
-        shell_escape_path(&release)
-    )));
-    assert!(out.contains(&format!(
-        "export RELO_HOME=\"{}\"",
-        shell_escape_path(&root.join("home"))
-    )));
+    assert!(!out.contains("RELO_ROOT"));
+    assert!(!out.contains("RELO_RELEASE"));
+    assert!(!out.contains("RELO_HOME"));
     assert!(out.contains(&format!(
         "export PATH=\"{}:$PATH\"",
         shell_escape_path(&release.join("bin"))
@@ -383,6 +374,26 @@ fn config_env_supports_path_and_literal_values() {
 
 #[cfg(not(windows))]
 #[test]
+fn config_path_and_env_support_yaml_aliases() {
+    let root = temp_root("yaml-aliases");
+    init(&root);
+    mkdir_release(&root, "3.9.9");
+    write_config(
+        &root,
+        "name: yaml-aliases\npath:\n  - &tool_bin active/bin\nenv:\n  TOOL_BIN:\n    path: *tool_bin\n",
+    );
+
+    let bin = root.join("releases").join("3.9.9").join("bin");
+    let out = assert_success(run(&root, &["use", "--shell", "posix", "3.9"]));
+    assert!(out.contains(&format!(
+        "export PATH=\"{}:$PATH\"",
+        shell_escape_path(&bin)
+    )));
+    assert!(out.contains(&format!("export TOOL_BIN=\"{}\"", shell_escape_path(&bin))));
+}
+
+#[cfg(not(windows))]
+#[test]
 fn release_specific_config_overrides_env_and_extends_path() {
     let root = temp_root("release-override");
     init(&root);
@@ -421,7 +432,8 @@ fn local_use_defaults_to_posix_on_non_windows() {
     mkdir_release(&root, "3.9.9");
 
     let out = assert_success(run(&root, &["use", "3.9"]));
-    assert!(out.contains("export RELO_ROOT="));
+    assert!(out.contains("export PATH="));
+    assert!(!out.contains("export RELO_ROOT="));
     assert!(!out.contains("$env:RELO_ROOT"));
 }
 
@@ -433,7 +445,8 @@ fn local_use_defaults_to_powershell_on_windows() {
     mkdir_release(&root, "3.9.9");
 
     let out = assert_success(run(&root, &["use", "3.9"]));
-    assert!(out.contains("$env:RELO_ROOT = '"));
+    assert!(out.contains("$env:PATH = "));
+    assert!(!out.contains("$env:RELO_ROOT = '"));
     assert!(!out.contains("export RELO_ROOT="));
 }
 
@@ -445,18 +458,9 @@ fn local_use_can_output_powershell_script() {
 
     let release = root.join("releases").join("3.9.9");
     let out = assert_success(run(&root, &["use", "--shell", "powershell", "3.9"]));
-    assert!(out.contains(&format!(
-        "$env:RELO_ROOT = '{}'",
-        powershell_escape_path(&root)
-    )));
-    assert!(out.contains(&format!(
-        "$env:RELO_RELEASE = '{}'",
-        powershell_escape_path(&release)
-    )));
-    assert!(out.contains(&format!(
-        "$env:RELO_HOME = '{}'",
-        powershell_escape_path(&root.join("home"))
-    )));
+    assert!(!out.contains("$env:RELO_ROOT"));
+    assert!(!out.contains("$env:RELO_RELEASE"));
+    assert!(!out.contains("$env:RELO_HOME"));
     assert!(out.contains(&format!(
         "$env:PATH = '{}' + ';' + $env:PATH",
         powershell_escape_path(&release.join("bin"))
@@ -471,12 +475,9 @@ fn local_use_can_output_cmd_script() {
 
     let release = root.join("releases").join("3.9.9");
     let out = assert_success(run(&root, &["use", "--shell", "cmd", "3.9"]));
-    assert!(out.contains(&format!("set \"RELO_ROOT={}\"", root.display())));
-    assert!(out.contains(&format!("set \"RELO_RELEASE={}\"", release.display())));
-    assert!(out.contains(&format!(
-        "set \"RELO_HOME={}\"",
-        root.join("home").display()
-    )));
+    assert!(!out.contains("RELO_ROOT"));
+    assert!(!out.contains("RELO_RELEASE"));
+    assert!(!out.contains("RELO_HOME"));
     assert!(out.contains(&format!(
         "set \"PATH={};%PATH%\"",
         release.join("bin").display()
@@ -600,12 +601,68 @@ fn list_marks_invalid_release_directories_without_failing() {
 }
 
 #[test]
-fn global_use_requires_explicit_version() {
-    let root = temp_root("global-requires-version");
+fn local_use_without_version_uses_latest_release() {
+    let root = temp_root("local-latest");
     init(&root);
     mkdir_release(&root, "1.0.0");
+    mkdir_release(&root, "2.0.0");
+
+    let release = root.join("releases").join("2.0.0");
+    let out = assert_success(run(&root, &["use", "--shell", "posix"]));
+    assert!(out.contains(&format!(
+        "export PATH=\"{}:$PATH\"",
+        shell_escape_path(&release.join("bin"))
+    )));
+    assert!(!root.join("active").exists());
+}
+
+#[test]
+fn local_use_without_version_prefers_active_release() {
+    let root = temp_root("local-active-default");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+    mkdir_release(&root, "2.0.0");
     assert_success(run(&root, &["use", "-g", "1.0.0"]));
 
-    let err = assert_failure(run(&root, &["use", "-g"]));
-    assert!(err.contains("global use requires a version"));
+    let release = root.join("releases").join("1.0.0");
+    let out = assert_success(run(&root, &["use", "--shell", "posix"]));
+    assert!(out.contains(&format!(
+        "export PATH=\"{}:$PATH\"",
+        shell_escape_path(&release.join("bin"))
+    )));
+    assert!(!out.contains(&shell_escape_path(
+        &root.join("releases").join("2.0.0").join("bin")
+    )));
+}
+
+#[test]
+fn global_use_without_version_uses_latest_release() {
+    let root = temp_root("global-latest");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+    mkdir_release(&root, "2.0.0");
+
+    assert_success(run(&root, &["use", "-g"]));
+
+    assert_eq!(
+        fs::read_link(root.join("active")).unwrap(),
+        PathBuf::from("releases/2.0.0")
+    );
+    assert_eq!(assert_success(run(&root, &["print", "version"])), "2.0.0\n");
+}
+
+#[test]
+fn global_use_without_version_keeps_active_release() {
+    let root = temp_root("global-active-default");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+    mkdir_release(&root, "2.0.0");
+    assert_success(run(&root, &["use", "-g", "1.0.0"]));
+
+    assert_success(run(&root, &["use", "-g"]));
+
+    assert_eq!(
+        fs::read_link(root.join("active")).unwrap(),
+        PathBuf::from("releases/1.0.0")
+    );
 }

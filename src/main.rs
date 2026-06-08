@@ -94,15 +94,12 @@ fn run() -> Result<()> {
             version,
         } => {
             let layout = Layout::load(root)?;
-            if global && version.is_none() {
-                anyhow::bail!("global use requires a version");
-            }
             if global && !path.is_empty() {
                 anyhow::bail!("path overrides are only valid for local use");
             }
             let release = match version {
                 Some(expr) => layout.resolve(&expr)?,
-                None => layout.active_release()?,
+                None => layout.default_release()?,
             };
             if global {
                 layout.set_active(&release.id)?;

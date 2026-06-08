@@ -39,7 +39,7 @@ relo [-d <dir>] list
 relo [-d <dir>] show [version]
 relo [-d <dir>] use [--path <dir>] [version]
 relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
-relo [-d <dir>] use -g <version>
+relo [-d <dir>] use -g [version]
 relo [-d <dir>] print <root|active|release|home|version> [version]
 relo [-d <dir>] config [show]
 relo init zsh
@@ -66,6 +66,9 @@ mkdir -p releases/3.8.8 releases/3.9.9
 relo use -g 3.9
 relo list
 ```
+
+When `version` is omitted, `relo use` selects the active release, or `latest`
+when no active release exists.
 
 `relo init` refuses to overwrite an existing `relo.yaml` unless `--force` is
 passed.
@@ -186,4 +189,4 @@ env:
     value: literal-value
 ```
 
-Release-specific `env` values override global `env` values with the same name. Release-specific `path` entries are added before global path entries. `relo use -g` only updates `active`; temporary `--path` overrides are valid only for local use.
+Release-specific `env` values override global `env` values with the same name. Release-specific `path` entries are added before global path entries. Local `relo use` exports only configured `env` values and `PATH`; it does not inject implicit relo variables. `relo use -g` only updates `active`; temporary `--path` overrides are valid only for local use.

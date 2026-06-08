@@ -39,7 +39,7 @@ relo [-d <dir>] list
 relo [-d <dir>] show [version]
 relo [-d <dir>] use [--path <dir>] [version]
 relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
-relo [-d <dir>] use -g <version>
+relo [-d <dir>] use -g [version]
 relo [-d <dir>] print <root|active|release|home|version> [version]
 relo [-d <dir>] config [show]
 relo init zsh
@@ -67,10 +67,13 @@ relo use -g 3.9
 relo list
 ```
 
+如果省略 `version`，`relo use` 默认选择 active release；如果还没有
+active，则选择 `latest`。
+
 如果 `relo.yaml` 已存在，`relo init` 默认不会覆盖；需要覆盖时显式传
 `--force`。
 
-`relo use -g <version>` 会更新 `active` 软链接：
+`relo use -g [version]` 会更新 `active` 软链接：
 
 ```text
 active -> releases/3.9.9
@@ -206,7 +209,7 @@ env:
     value: literal-value
 ```
 
-版本级 `env` 会覆盖同名全局 `env`。版本级 `path` 会排在全局 `path` 前面。`relo use -g` 只更新 `active`，临时 `--path` 覆盖只允许用于 local use。
+版本级 `env` 会覆盖同名全局 `env`。版本级 `path` 会排在全局 `path` 前面。local `relo use` 只导出配置里的 `env` 和 `PATH`，不会隐式注入 relo 内部变量。`relo use -g` 只更新 `active`，临时 `--path` 覆盖只允许用于 local use。
 
 ## 设计边界
 

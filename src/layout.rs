@@ -124,6 +124,13 @@ impl Layout {
         self.resolve(&id)
     }
 
+    pub fn default_release(&self) -> Result<Release> {
+        match self.active_version()? {
+            Some(id) => self.resolve(&id),
+            None => self.resolve("latest"),
+        }
+    }
+
     pub fn set_active(&self, id: &str) -> Result<()> {
         let active = self.active_path();
         if active.exists() || fs::symlink_metadata(&active).is_ok() {

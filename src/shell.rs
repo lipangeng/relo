@@ -32,22 +32,7 @@ pub fn exports(
 }
 
 fn posix_exports(layout: &Layout, release_id: &str, path: &[String]) -> Result<String> {
-    let release = layout.release_path(release_id);
-    let home = layout.home_for(release_id);
     let mut out = String::new();
-    out.push_str(&format!(
-        "export RELO_ROOT=\"{}\"\n",
-        escape_posix(&layout.root.display().to_string())
-    ));
-    out.push_str(&format!(
-        "export RELO_RELEASE=\"{}\"\n",
-        escape_posix(&release.display().to_string())
-    ));
-    out.push_str(&format!(
-        "export RELO_HOME=\"{}\"\n",
-        escape_posix(&home.display().to_string())
-    ));
-
     for (name, value) in layout.effective_env(release_id) {
         out.push_str(&format!("export {name}=\"{}\"\n", escape_posix(&value)));
     }
@@ -66,22 +51,7 @@ fn posix_exports(layout: &Layout, release_id: &str, path: &[String]) -> Result<S
 }
 
 fn powershell_exports(layout: &Layout, release_id: &str, path: &[String]) -> Result<String> {
-    let release = layout.release_path(release_id);
-    let home = layout.home_for(release_id);
     let mut out = String::new();
-    out.push_str(&format!(
-        "$env:RELO_ROOT = '{}'\n",
-        escape_powershell(&layout.root.display().to_string())
-    ));
-    out.push_str(&format!(
-        "$env:RELO_RELEASE = '{}'\n",
-        escape_powershell(&release.display().to_string())
-    ));
-    out.push_str(&format!(
-        "$env:RELO_HOME = '{}'\n",
-        escape_powershell(&home.display().to_string())
-    ));
-
     for (name, value) in layout.effective_env(release_id) {
         out.push_str(&format!("$env:{name} = '{}'\n", escape_powershell(&value)));
     }
@@ -100,22 +70,7 @@ fn powershell_exports(layout: &Layout, release_id: &str, path: &[String]) -> Res
 }
 
 fn cmd_exports(layout: &Layout, release_id: &str, path: &[String]) -> Result<String> {
-    let release = layout.release_path(release_id);
-    let home = layout.home_for(release_id);
     let mut out = String::new();
-    out.push_str(&format!(
-        "set \"RELO_ROOT={}\"\n",
-        escape_cmd(&layout.root.display().to_string())
-    ));
-    out.push_str(&format!(
-        "set \"RELO_RELEASE={}\"\n",
-        escape_cmd(&release.display().to_string())
-    ));
-    out.push_str(&format!(
-        "set \"RELO_HOME={}\"\n",
-        escape_cmd(&home.display().to_string())
-    ));
-
     for (name, value) in layout.effective_env(release_id) {
         out.push_str(&format!("set \"{name}={}\"\n", escape_cmd(&value)));
     }
