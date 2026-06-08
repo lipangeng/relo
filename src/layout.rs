@@ -196,9 +196,9 @@ impl Layout {
     fn resolve_config_path(&self, value: &str) -> PathBuf {
         let path = Path::new(value);
         if path.is_absolute() {
-            return path.to_path_buf();
+            return normalize_path(path);
         }
-        self.root.join(path)
+        normalize_path(&self.root.join(path))
     }
 
     fn validate_active(&self) -> Result<()> {
@@ -262,6 +262,10 @@ impl Layout {
 
         bail!("unknown variable: {name}");
     }
+}
+
+fn normalize_path(path: &Path) -> PathBuf {
+    path.components().collect()
 }
 
 #[cfg(unix)]
