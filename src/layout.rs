@@ -216,7 +216,9 @@ impl Layout {
         })
         .map_err(|err| anyhow::anyhow!("failed to expand {value:?}: {err}"))?
         .into_owned();
-        Ok(shellexpand::tilde(&expanded).into_owned())
+        Ok(normalize_expanded_env_value(
+            shellexpand::tilde(&expanded).as_ref(),
+        ))
     }
 
     fn expand_path_value(
@@ -266,6 +268,20 @@ impl Layout {
 
 fn normalize_path(path: &Path) -> PathBuf {
     path.components().collect()
+}
+
+fn normalize_expanded_env_value(value: &str) -> String {
+    #[cfg(windows)]
+    {
+        let path = Path::new(value);
+        // Config env values are still strings, but path-like built-in values
+        // may be extended with `/suffix`. Normalize only a single absolute
+        // path, not PATH-style lists or arbitrary literals.
+        if path.is_absolute() && !value.contains(';') {
+            return normalize_path(path).display().to_string();
+        }
+    }
+    value.to_string()
 }
 
 #[cfg(unix)]
