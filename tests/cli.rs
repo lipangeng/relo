@@ -218,15 +218,15 @@ fn print_version_resolves_semver_prefixes_by_highest_match() {
     }
 
     assert_eq!(
-        assert_success(run(&root, &["print", "version", "3"])),
+        assert_success(run(&root, &["print", "version", "--version", "3"])),
         "3.10.0\n"
     );
     assert_eq!(
-        assert_success(run(&root, &["print", "version", "3.5"])),
+        assert_success(run(&root, &["print", "version", "--version", "3.5"])),
         "3.5.7\n"
     );
     assert_eq!(
-        assert_success(run(&root, &["print", "version", "latest"])),
+        assert_success(run(&root, &["print", "version", "--version", "latest"])),
         "3.10.0\n"
     );
 }
@@ -240,11 +240,14 @@ fn print_version_prefers_unlabeled_exact_semver_match() {
     }
 
     assert_eq!(
-        assert_success(run(&root, &["print", "version", "3.9.9"])),
+        assert_success(run(&root, &["print", "version", "--version", "3.9.9"])),
         "3.9.9\n"
     );
     assert_eq!(
-        assert_success(run(&root, &["print", "version", "3.9.9_arm64"])),
+        assert_success(run(
+            &root,
+            &["print", "version", "--version", "3.9.9_arm64"]
+        )),
         "3.9.9_arm64\n"
     );
 }
@@ -257,10 +260,79 @@ fn print_version_reports_ambiguous_labeled_exact_semver_match() {
         mkdir_release(&root, version);
     }
 
-    let err = assert_failure(run(&root, &["print", "version", "3.9.9"]));
+    let err = assert_failure(run(&root, &["print", "version", "--version", "3.9.9"]));
     assert!(err.contains("ambiguous release: 3.9.9"));
     assert!(err.contains("3.9.9_arm64"));
     assert!(err.contains("3.9.9_internal"));
+}
+
+#[test]
+fn print_path_outputs_effective_paths_one_per_line() {
+    let root = temp_root("print-path");
+    init(&root);
+    mkdir_release(&root, "3.8.8");
+    mkdir_release(&root, "3.9.9");
+    write_config(
+        &root,
+        "name: print-path\npath:\n  - active/bin\n  - /opt/global/bin\nreleases:\n  - id: 3.8.8\n    path:\n      - active/sbin\n",
+    );
+
+    let release = root.join("releases").join("3.8.8");
+    assert_eq!(
+        assert_success(run(&root, &["print", "path", "--version", "3.8"])),
+        format!(
+            "{}\n{}\n/opt/global/bin\n",
+            release.join("sbin").display(),
+            release.join("bin").display()
+        )
+    );
+}
+
+#[test]
+fn print_env_outputs_effective_env_one_per_line() {
+    let root = temp_root("print-env");
+    init(&root);
+    mkdir_release(&root, "3.8.8");
+    mkdir_release(&root, "3.9.9");
+    write_config(
+        &root,
+        "name: print-env\nenv:\n  JAVA_HOME:\n    path: release\n  JAVA_OPTS:\n    value: -Xmx1g\nreleases:\n  - id: 3.8.8\n    env:\n      JAVA_OPTS:\n        value: -Xmx2g\n",
+    );
+
+    let release = root.join("releases").join("3.8.8");
+    assert_eq!(
+        assert_success(run(&root, &["print", "env", "--version", "3.8"])),
+        format!("JAVA_HOME={}\nJAVA_OPTS=-Xmx2g\n", release.display())
+    );
+}
+
+#[test]
+fn print_path_without_version_prefers_active_then_latest() {
+    let root = temp_root("print-default-release");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+    mkdir_release(&root, "2.0.0");
+
+    assert_eq!(
+        assert_success(run(&root, &["print", "path"])),
+        format!("{}\n", root.join("releases/2.0.0/bin").display())
+    );
+
+    assert_success(run(&root, &["use", "-g", "1.0.0"]));
+    assert_eq!(
+        assert_success(run(&root, &["print", "path"])),
+        format!("{}\n", root.join("releases/1.0.0/bin").display())
+    );
+}
+
+#[test]
+fn print_rejects_version_for_targets_without_release_context() {
+    let root = temp_root("print-root-version");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+
+    let err = assert_failure(run(&root, &["print", "root", "--version", "1.0.0"]));
+    assert!(err.contains("--version is not valid for print root"));
 }
 
 #[test]
@@ -578,7 +650,7 @@ fn versioned_home_prints_and_use_creates_version_home() {
 
     let expected = root.join("homes/3.9.9");
     assert_eq!(
-        assert_success(run(&root, &["print", "home", "3.9"])),
+        assert_success(run(&root, &["print", "home", "--version", "3.9"])),
         format!("{}\n", expected.display())
     );
     assert!(!expected.exists());

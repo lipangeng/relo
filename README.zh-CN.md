@@ -40,7 +40,7 @@ relo [-d <dir>] show [version]
 relo [-d <dir>] use [-v] [--path <dir>] [--path-append] [version]
 relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
 relo [-d <dir>] use -g [version]
-relo [-d <dir>] print <root|active|release|home|version> [version]
+relo [-d <dir>] print <root|active|release|home|version|path|env> [--version <version>]
 relo [-d <dir>] config [show]
 relo init zsh
 relo init bash
@@ -136,6 +136,41 @@ relo use 3.9 --path-append
 
 传 `-v` 会把选中的版本、release 路径和模式打印到 stderr，不影响 stdout
 输出的 shell 脚本。
+
+`print path` 每行输出一个解析后的 path，`print env` 每行输出一个
+`KEY=value`：
+
+```bash
+relo print path --version 3.9
+relo print env --version 3.9
+```
+
+macOS/Linux 的 POSIX shell 中，`PATH` 使用 `:` 分隔。`paste -sd: -`
+会从 stdin 读取逐行 path，并合并成一行以 `:` 分隔的字符串：
+
+```bash
+export PATH="$(relo print path | paste -sd: -):$PATH"
+```
+
+PowerShell 使用 `;` 作为 path 分隔符：
+
+```powershell
+$env:PATH = ((relo print path) -join ';') + ';' + $env:PATH
+```
+
+对于不包含空格或 shell 特殊字符的简单环境变量值，可以用 `xargs` 把
+`KEY=value` 传给 `export`：
+
+```bash
+export $(relo print env | xargs)
+```
+
+如果值里可能包含空格，使用保留整行的循环更稳，确保每行 `KEY=value`
+作为一个参数导出：
+
+```bash
+while IFS= read -r entry; do export "$entry"; done < <(relo print env)
+```
 
 相对路径会相对于 relo root 解析，绝对路径会保持原样。支持以下符号前缀：
 

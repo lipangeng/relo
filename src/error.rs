@@ -18,6 +18,4 @@ pub enum ReloError {
     NoMatch(String),
     #[error("ambiguous release: {expr}\nmatched:\n{matches}\nplease specify full release name")]
     Ambiguous { expr: String, matches: String },
-    #[error("no active release")]
-    NoActive,
 }

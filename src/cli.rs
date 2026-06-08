@@ -48,6 +48,7 @@ pub enum Command {
     Print {
         #[arg(value_enum)]
         target: PrintTarget,
+        #[arg(long = "version")]
         version: Option<String>,
     },
     Config {
@@ -77,6 +78,22 @@ pub enum PrintTarget {
     Release,
     Home,
     Version,
+    Path,
+    Env,
+}
+
+impl PrintTarget {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            PrintTarget::Root => "root",
+            PrintTarget::Active => "active",
+            PrintTarget::Release => "release",
+            PrintTarget::Home => "home",
+            PrintTarget::Version => "version",
+            PrintTarget::Path => "path",
+            PrintTarget::Env => "env",
+        }
+    }
 }
 
 #[derive(Clone, Subcommand)]

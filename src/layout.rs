@@ -119,11 +119,6 @@ impl Layout {
         Ok(Some(id))
     }
 
-    pub fn active_release(&self) -> Result<Release> {
-        let id = self.active_version()?.ok_or(ReloError::NoActive)?;
-        self.resolve(&id)
-    }
-
     pub fn default_release(&self) -> Result<Release> {
         match self.active_version()? {
             Some(id) => self.resolve(&id),

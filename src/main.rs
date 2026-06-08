@@ -158,28 +158,37 @@ fn run() -> Result<()> {
         Command::Print { target, version } => {
             let layout = Layout::load(root)?;
             match target {
-                PrintTarget::Root => println!("{}", layout.root.display()),
-                PrintTarget::Active => println!("{}", layout.active_path().display()),
+                PrintTarget::Root => {
+                    reject_print_version(&target, &version)?;
+                    println!("{}", layout.root.display());
+                }
+                PrintTarget::Active => {
+                    reject_print_version(&target, &version)?;
+                    println!("{}", layout.active_path().display());
+                }
                 PrintTarget::Version => {
-                    let release = match version {
-                        Some(expr) => layout.resolve(&expr)?,
-                        None => layout.active_release()?,
-                    };
+                    let release = print_release(&layout, version.as_deref())?;
                     println!("{}", release.id);
                 }
                 PrintTarget::Release => {
-                    let release = match version {
-                        Some(expr) => layout.resolve(&expr)?,
-                        None => layout.active_release()?,
-                    };
+                    let release = print_release(&layout, version.as_deref())?;
                     println!("{}", release.path.display());
                 }
                 PrintTarget::Home => {
-                    let release = match version {
-                        Some(expr) => layout.resolve(&expr)?,
-                        None => layout.active_release()?,
-                    };
+                    let release = print_release(&layout, version.as_deref())?;
                     println!("{}", layout.home_for(&release.id).display());
+                }
+                PrintTarget::Path => {
+                    let release = print_release(&layout, version.as_deref())?;
+                    for path in layout.effective_path(&release.id, &[]) {
+                        println!("{}", path.display());
+                    }
+                }
+                PrintTarget::Env => {
+                    let release = print_release(&layout, version.as_deref())?;
+                    for (name, value) in layout.effective_env(&release.id) {
+                        println!("{name}={value}");
+                    }
                 }
             }
         }
@@ -200,6 +209,20 @@ fn print_use_help() {
         .find_subcommand_mut("use")
         .expect("use subcommand exists");
     print!("{}", use_command.render_long_help());
+}
+
+fn print_release(layout: &Layout, version: Option<&str>) -> Result<crate::version::Release> {
+    match version {
+        Some(expr) => layout.resolve(expr),
+        None => layout.default_release(),
+    }
+}
+
+fn reject_print_version(target: &PrintTarget, version: &Option<String>) -> Result<()> {
+    if version.is_some() {
+        anyhow::bail!("--version is not valid for print {}", target.as_str());
+    }
+    Ok(())
 }
 
 fn use_forward_args(global: bool, verbose: u8, version: Option<&str>) -> Vec<String> {

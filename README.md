@@ -40,7 +40,7 @@ relo [-d <dir>] show [version]
 relo [-d <dir>] use [-v] [--path <dir>] [--path-append] [version]
 relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
 relo [-d <dir>] use -g [version]
-relo [-d <dir>] print <root|active|release|home|version> [version]
+relo [-d <dir>] print <root|active|release|home|version|path|env> [--version <version>]
 relo [-d <dir>] config [show]
 relo init zsh
 relo init bash
@@ -126,6 +126,42 @@ relo use 3.9 --path-append
 
 Pass `-v` to print the selected version, release path, and mode to stderr
 without changing the shell script printed to stdout.
+
+`print path` emits one resolved path per line, and `print env` emits one
+`KEY=value` pair per line:
+
+```bash
+relo print path --version 3.9
+relo print env --version 3.9
+```
+
+For POSIX shells on macOS/Linux, `PATH` entries are separated by `:`. The
+`paste -sd: -` command joins newline-delimited paths from stdin into one
+colon-delimited line:
+
+```bash
+export PATH="$(relo print path | paste -sd: -):$PATH"
+```
+
+PowerShell uses `;` as the path separator:
+
+```powershell
+$env:PATH = ((relo print path) -join ';') + ';' + $env:PATH
+```
+
+For simple environment values without spaces or shell metacharacters, `xargs`
+can pass `KEY=value` pairs to `export`:
+
+```bash
+export $(relo print env | xargs)
+```
+
+If values may contain spaces, use a line-preserving loop instead so each
+`KEY=value` line is exported as one argument:
+
+```bash
+while IFS= read -r entry; do export "$entry"; done < <(relo print env)
+```
 
 Relative paths are resolved against the relo root. Absolute paths are allowed. Symbolic prefixes are supported:
 
