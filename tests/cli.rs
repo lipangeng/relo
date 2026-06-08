@@ -451,7 +451,8 @@ fn env_preserves_literals_while_path_resolves_paths() {
         "name: env-literal-path-resolve\nenv:\n  RELATIVE: tools/bin\n  TILDE: ~/cache\npath:\n  - tools/bin\n",
     );
 
-    let home_cache = PathBuf::from(shellexpand::tilde("~/cache").into_owned());
+    let home_cache = shellexpand::tilde("~/cache").into_owned();
+    let home_cache: PathBuf = Path::new(&home_cache).components().collect();
     assert_eq!(
         assert_success(run(&root, &["print", "env", "--version", "1.0.0"])),
         format!("RELATIVE=tools/bin\nTILDE={}\n", home_cache.display())
