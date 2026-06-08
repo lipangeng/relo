@@ -119,12 +119,12 @@ fn run() -> Result<()> {
                 }
                 return Ok(());
             }
-            if global && shell.is_some() {
+            if let (true, Some(shell)) = (global, shell) {
                 print!(
                     "{}",
                     shell::forward(
                         &use_forward_args(global, verbose, version.as_deref()),
-                        ShellKind::from(shell.unwrap())
+                        ShellKind::from(shell)
                     )?
                 );
                 return Ok(());

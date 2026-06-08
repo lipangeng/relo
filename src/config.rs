@@ -5,17 +5,12 @@ use serde_yml::Value;
 use std::collections::BTreeMap;
 use std::path::{Component, Path};
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum HomeMode {
+    #[default]
     Shared,
     Versioned,
-}
-
-impl Default for HomeMode {
-    fn default() -> Self {
-        Self::Shared
-    }
 }
 
 impl HomeMode {
