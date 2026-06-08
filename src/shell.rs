@@ -32,6 +32,39 @@ pub fn exports(
     }
 }
 
+pub fn forward<S: AsRef<str>>(args: &[S], shell: ShellKind) -> Result<String> {
+    let exe = std::env::current_exe()?;
+    let exe = exe.display().to_string();
+    let args = args.iter().map(|arg| arg.as_ref()).collect::<Vec<_>>();
+    let out = match shell {
+        ShellKind::Posix => format!(
+            "{} {}\n",
+            quote_posix(&exe),
+            args.iter()
+                .map(|arg| quote_posix(arg))
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
+        ShellKind::Powershell => format!(
+            "& {} {}\n",
+            quote_powershell(&exe),
+            args.iter()
+                .map(|arg| quote_powershell(arg))
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
+        ShellKind::Cmd => format!(
+            "{} {}\n",
+            quote_cmd(&exe),
+            args.iter()
+                .map(|arg| quote_cmd(arg))
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
+    };
+    Ok(out)
+}
+
 fn posix_exports(
     layout: &Layout,
     release_id: &str,
@@ -128,14 +161,7 @@ fn posix_wrapper() -> &'static str {
     r#"relo() {
   if [ "$1" = "use" ]; then
     shift
-    case " $* " in
-      *" -g "*|*" --global "*)
-        command relo use "$@"
-        ;;
-      *)
-        eval "$(command relo use --shell posix "$@")"
-        ;;
-    esac
+    eval "$(command relo use --shell posix "$@")"
   else
     command relo "$@"
   fi
@@ -150,11 +176,7 @@ fn powershell_wrapper() -> &'static str {
     if ($args.Count -gt 1) {
       $rest = $args[1..($args.Count - 1)]
     }
-    if ($rest -contains "-g" -or $rest -contains "--global") {
-      & relo.exe use @rest
-    } else {
-      Invoke-Expression (& relo.exe use --shell powershell @rest)
-    }
+    Invoke-Expression (& relo.exe use --shell powershell @rest)
   } else {
     & relo.exe @args
   }
@@ -176,8 +198,16 @@ fn escape_posix(value: &str) -> String {
         .replace('$', "\\$")
 }
 
+fn quote_posix(value: &str) -> String {
+    format!("\"{}\"", escape_posix(value))
+}
+
 fn escape_powershell(value: &str) -> String {
     value.replace('\'', "''")
+}
+
+fn quote_powershell(value: &str) -> String {
+    format!("'{}'", escape_powershell(value))
 }
 
 fn escape_cmd(value: &str) -> String {
@@ -189,4 +219,8 @@ fn escape_cmd(value: &str) -> String {
         .replace('<', "^<")
         .replace('>', "^>")
         .replace('"', "^\"")
+}
+
+fn quote_cmd(value: &str) -> String {
+    format!("\"{}\"", escape_cmd(value))
 }

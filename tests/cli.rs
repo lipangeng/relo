@@ -612,7 +612,7 @@ fn init_shell_generates_wrapper_that_evals_local_use_only() {
 
     assert!(out.contains("relo()"));
     assert!(out.contains("eval \"$(command relo use --shell posix \"$@\")\""));
-    assert!(out.contains("command relo use \"$@\""));
+    assert!(!out.contains("case \" $* \""));
 }
 
 #[test]
@@ -623,6 +623,7 @@ fn init_powershell_generates_wrapper_that_invokes_expression_for_local_use() {
     assert!(out.contains("function relo"));
     assert!(out.contains("Invoke-Expression"));
     assert!(out.contains("--shell powershell"));
+    assert!(!out.contains("$rest -contains \"--help\""));
 }
 
 #[test]
@@ -632,6 +633,24 @@ fn init_cmd_generates_wrapper_for_cmd_shell() {
 
     assert!(out.contains("doskey relo="));
     assert!(out.contains("--shell cmd"));
+}
+
+#[test]
+fn use_shell_help_outputs_forwarding_script() {
+    let root = temp_root("shell-help");
+    let out = assert_success(run(&root, &["use", "--shell", "posix", "--help"]));
+
+    assert!(out.contains("\"use\" \"--help\""));
+    assert!(!out.contains("Usage:"));
+}
+
+#[test]
+fn use_help_outputs_human_readable_help_without_shell() {
+    let root = temp_root("use-help");
+    let out = assert_success(run(&root, &["use", "--help"]));
+
+    assert!(out.contains("Usage: use"));
+    assert!(out.contains("--path-append"));
 }
 
 #[test]

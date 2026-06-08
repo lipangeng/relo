@@ -6,7 +6,7 @@ mod shell;
 mod version;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use cli::{Cli, Command, ConfigCommand, HomeArg, InitTarget, PrintTarget, ShellArg};
 use layout::Layout;
 use shell::ShellKind;
@@ -93,8 +93,42 @@ fn run() -> Result<()> {
             path,
             path_append,
             verbose,
+            help,
+            version_flag,
             version,
         } => {
+            if help {
+                if let Some(shell) = shell {
+                    print!(
+                        "{}",
+                        shell::forward(&["use", "--help"], ShellKind::from(shell))?
+                    );
+                } else {
+                    print_use_help();
+                }
+                return Ok(());
+            }
+            if version_flag {
+                if let Some(shell) = shell {
+                    print!(
+                        "{}",
+                        shell::forward(&["use", "--version"], ShellKind::from(shell))?
+                    );
+                } else {
+                    println!("relo {}", env!("CARGO_PKG_VERSION"));
+                }
+                return Ok(());
+            }
+            if global && shell.is_some() {
+                print!(
+                    "{}",
+                    shell::forward(
+                        &use_forward_args(global, verbose, version.as_deref()),
+                        ShellKind::from(shell.unwrap())
+                    )?
+                );
+                return Ok(());
+            }
             let layout = Layout::load(root)?;
             if global && !path.is_empty() {
                 anyhow::bail!("path overrides are only valid for local use");
@@ -158,6 +192,28 @@ fn run() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn print_use_help() {
+    let mut command = Cli::command();
+    let use_command = command
+        .find_subcommand_mut("use")
+        .expect("use subcommand exists");
+    print!("{}", use_command.render_long_help());
+}
+
+fn use_forward_args(global: bool, verbose: u8, version: Option<&str>) -> Vec<String> {
+    let mut args = vec!["use".to_string()];
+    if global {
+        args.push("--global".to_string());
+    }
+    for _ in 0..verbose {
+        args.push("-v".to_string());
+    }
+    if let Some(version) = version {
+        args.push(version.to_string());
+    }
+    args
 }
 
 fn root_dir(cli: &Cli) -> PathBuf {

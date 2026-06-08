@@ -27,6 +27,7 @@ pub enum Command {
     Show {
         version: Option<String>,
     },
+    #[command(disable_help_flag = true)]
     Use {
         #[arg(short = 'g', long = "global")]
         global: bool,
@@ -38,6 +39,10 @@ pub enum Command {
         path_append: bool,
         #[arg(short = 'v', long = "verbose", action = clap::ArgAction::Count)]
         verbose: u8,
+        #[arg(short = 'h', long = "help")]
+        help: bool,
+        #[arg(short = 'V', long = "version")]
+        version_flag: bool,
         version: Option<String>,
     },
     Print {
