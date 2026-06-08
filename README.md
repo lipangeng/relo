@@ -128,8 +128,9 @@ relo use 3.9 --path '${relo.release}/sbin' --path /opt/tools/bin
 relo use 3.9 --path-append
 ```
 
-Pass `-v` to print the selected version, release path, and mode to stderr
-without changing the shell script printed to stdout.
+Pass `-v` to print the selected version, release path, mode, effective env,
+and effective path entries to stderr without changing the shell script printed
+to stdout.
 
 `print path` emits one resolved path per line, and `print env` emits one
 `KEY=value` pair per line:

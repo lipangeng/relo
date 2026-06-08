@@ -586,17 +586,24 @@ fn local_use_verbose_reports_selected_version_on_stderr() {
     let root = temp_root("use-verbose");
     init(&root);
     mkdir_release(&root, "3.9.9");
+    write_config(
+        &root,
+        "name: use-verbose\nenv:\n  MAVEN_HOME: ${relo.release}\npath:\n  - ${relo.release}/bin\n  - tools/bin\n",
+    );
 
     let release = root.join("releases").join("3.9.9");
     let output = run(&root, &["use", "-v", "--shell", "posix", "3.9"]);
     let (out, err) = assert_success_output(output);
 
-    assert!(out.contains(&format!(
-        "export PATH=\"{}:$PATH\"",
-        shell_escape_path(&release.join("bin"))
-    )));
+    assert!(out.contains(&shell_escape_path(&release.join("bin"))));
     assert!(err.contains("version: 3.9.9"));
     assert!(err.contains(&format!("release: {}", release.display())));
+    assert!(err.contains("mode: local"));
+    assert!(err.contains("env:"));
+    assert!(err.contains(&format!("  MAVEN_HOME={}", release.display())));
+    assert!(err.contains("path:"));
+    assert!(err.contains(&format!("  {}", release.join("bin").display())));
+    assert!(err.contains(&format!("  {}", root.join("tools").join("bin").display())));
 }
 
 #[cfg(not(windows))]
@@ -1020,15 +1027,21 @@ fn global_use_verbose_reports_selected_version_on_stderr() {
     let root = temp_root("global-verbose");
     init(&root);
     mkdir_release(&root, "3.9.9");
+    write_config(
+        &root,
+        "name: global-verbose\nenv:\n  MAVEN_HOME: ${relo.release}\npath:\n  - ${relo.release}/bin\n",
+    );
 
     let output = run(&root, &["use", "-g", "-v", "3.9"]);
     let (out, err) = assert_success_output(output);
+    let release = root.join("releases").join("3.9.9");
 
     assert_eq!(out, "");
     assert!(err.contains("version: 3.9.9"));
-    assert!(err.contains(&format!(
-        "release: {}",
-        root.join("releases").join("3.9.9").display()
-    )));
+    assert!(err.contains(&format!("release: {}", release.display())));
     assert!(err.contains("mode: global"));
+    assert!(err.contains("env:"));
+    assert!(err.contains(&format!("  MAVEN_HOME={}", release.display())));
+    assert!(err.contains("path:"));
+    assert!(err.contains(&format!("  {}", release.join("bin").display())));
 }

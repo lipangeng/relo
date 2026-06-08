@@ -138,9 +138,7 @@ fn run() -> Result<()> {
                 None => layout.default_release()?,
             };
             if verbose > 0 {
-                eprintln!("version: {}", release.id);
-                eprintln!("release: {}", release.path.display());
-                eprintln!("mode: {}", if global { "global" } else { "local" });
+                print_use_verbose(&layout, &release.id, global, &path)?;
             }
             if global {
                 layout.set_active(&release.id)?;
@@ -216,6 +214,44 @@ fn print_release(layout: &Layout, version: Option<&str>) -> Result<crate::versio
         Some(expr) => layout.resolve(expr),
         None => layout.default_release(),
     }
+}
+
+fn print_use_verbose(
+    layout: &Layout,
+    release_id: &str,
+    global: bool,
+    path: &[String],
+) -> Result<()> {
+    let release = layout.resolve(release_id)?;
+    eprintln!("version: {}", release.id);
+    eprintln!("release: {}", release.path.display());
+    eprintln!("mode: {}", if global { "global" } else { "local" });
+
+    eprintln!("env:");
+    let env = layout.effective_env(&release.id)?;
+    if env.is_empty() {
+        eprintln!("  (none)");
+    } else {
+        for (name, value) in env {
+            eprintln!("  {name}={value}");
+        }
+    }
+
+    eprintln!("path:");
+    let path = if global {
+        layout.effective_path(&release.id, &[])?
+    } else {
+        layout.effective_path(&release.id, path)?
+    };
+    if path.is_empty() {
+        eprintln!("  (none)");
+    } else {
+        for path in path {
+            eprintln!("  {}", path.display());
+        }
+    }
+
+    Ok(())
 }
 
 fn reject_print_version(target: &PrintTarget, version: &Option<String>) -> Result<()> {

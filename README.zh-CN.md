@@ -182,7 +182,7 @@ relo use --shell powershell 3.8
 relo use --shell cmd 3.8
 ```
 
-传 `-v` 会把选中的版本、release 路径和模式打印到 stderr，不影响 stdout 输出的 shell 脚本：
+传 `-v` 会把选中的版本、release 路径、模式、最终 env 和最终 path 条目打印到 stderr，不影响 stdout 输出的 shell 脚本：
 
 ```bash
 eval "$(relo use -v 3.9)"
