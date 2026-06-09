@@ -71,7 +71,7 @@ impl Layout {
             let id = entry.file_name().to_string_lossy().to_string();
             releases.push(parse_release(&id, entry.path())?);
         }
-        // Keep all callers on the same semver ordering contract.
+        // Keep all callers on the same dotted-version ordering contract.
         releases.sort();
         Ok(releases)
     }

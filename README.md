@@ -36,7 +36,7 @@ Versioned home mode:
 └── relo.yaml
 ```
 
-Release directories must be named as `<semver>` or `<semver>_<label>`, for example `3.9.9`, `3.9.9_arm64`, or `1.12.0_darwin-arm64`. Version comparison uses only the semantic version before `_`.
+Release directories must be named as `<version>` or `<version>_<label>`, where `<version>` is a dotted numeric version with one or more parts. Examples: `8`, `8.1`, `3.9.9`, `8.1.1.7`, `3.9.9_arm64`, or `1.12.0_darwin-arm64`. Version comparison uses only the numeric version before `_`.
 
 ## Commands
 
@@ -209,10 +209,12 @@ latest
 3
 3.5
 3.5.0
+8.1.1.7
+8.1.1.10.2
 3.5.0_arm64
 ```
 
-Prefix expressions choose the highest matching semantic version. Exact full directory names match directly. If `3.9.9`, `3.9.9_arm64`, and `3.9.9_internal` exist, `3.9.9` resolves to the unlabeled release. If only labeled variants exist, `3.9.9` is ambiguous and the full release name must be specified.
+Numeric expressions can use any number of dotted parts and choose the highest matching dotted numeric version unless they exactly match a full release directory name. Exact full directory names match directly. If `3.9.9`, `3.9.9_arm64`, and `3.9.9_internal` exist, `3.9.9` resolves to the unlabeled release. If only labeled variants exist, `3.9.9` is ambiguous and the full release name must be specified.
 
 ## Configuration
 

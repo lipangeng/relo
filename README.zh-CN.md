@@ -71,7 +71,7 @@ cargo run -- -d /opt/relo/maven init
 
 共享 home 模式下，所有 release 共用 `<context>/home`。版本独立 home 模式下，每个 release 使用 `<context>/homes/<version>`。
 
-release 目录名必须是 `<semver>` 或 `<semver>_<label>`，例如 `3.9.9`、`3.9.9_arm64`、`1.12.0_darwin-arm64`。版本比较只使用 `_` 前面的语义化版本部分。
+release 目录名必须是 `<version>` 或 `<version>_<label>`，其中 `<version>` 是一段或多段的点分数字版本，例如 `8`、`8.1`、`3.9.9`、`8.1.1.7`、`3.9.9_arm64`、`1.12.0_darwin-arm64`。版本比较只使用 `_` 前面的数字版本部分。
 
 ## 快速开始
 
@@ -277,13 +277,15 @@ latest
 3
 3.5
 3.5.0
+8.1.1.7
+8.1.1.10.2
 3.5.0_arm64
 ```
 
 规则：
 
-- `latest` 选择语义化版本最高的 release。
-- `3`、`3.5` 这类前缀表达式选择匹配范围内最高的语义化版本。
+- `latest` 选择点分数字版本最高的 release。
+- `3`、`3.5`、`8.1.1.7` 这类数字表达式可以包含任意段数；如果没有精确匹配完整目录名，则作为前缀表达式选择匹配范围内最高的点分数字版本。
 - `3.5.0` 会优先匹配无 label 的 `3.5.0` 目录。
 - `3.5.0_arm64` 这类完整目录名会精确匹配。
 - 如果只存在多个带 label 的同版本目录，例如 `3.9.9_arm64` 和 `3.9.9_internal`，表达式 `3.9.9` 是歧义的，必须指定完整 release 名称。
@@ -361,7 +363,7 @@ Release 专属的 `path` 条目排在全局 path 条目之前。`path` 在 env �
 
 `active points to missing release`：`active` 指向的 release 目录不存在。需要恢复该 release，或用 `relo use -g <version>` 切换到存在的 release。
 
-`invalid release directory`：`releases/` 下的目录名不是 `<semver>` 或 `<semver>_<label>`。
+`invalid release directory`：`releases/` 下的目录名不是 `<version>` 或 `<version>_<label>`。
 
 `ambiguous release`：版本表达式匹配到多个带 label 的同版本 release。请使用完整目录名。
 

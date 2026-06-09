@@ -249,10 +249,20 @@ fn init_accepts_path_options() {
 }
 
 #[test]
-fn print_version_resolves_semver_prefixes_by_highest_match() {
+fn print_version_resolves_dotted_version_prefixes_by_highest_match() {
     let root = temp_root("version-prefix");
     init(&root);
-    for version in ["3.5.0", "3.5.2", "3.5.7", "3.6.1", "3.9.9", "3.10.0"] {
+    for version in [
+        "3.5.0",
+        "3.5.2",
+        "3.5.7",
+        "3.6.1",
+        "3.9.9",
+        "3.10.0",
+        "8.1.1.7",
+        "8.1.1.10",
+        "8.1.1.10.2",
+    ] {
         mkdir_release(&root, version);
     }
 
@@ -265,13 +275,43 @@ fn print_version_resolves_semver_prefixes_by_highest_match() {
         "3.5.7\n"
     );
     assert_eq!(
+        assert_success(run(&root, &["print", "version", "--version", "8.1.1"])),
+        "8.1.1.10.2\n"
+    );
+    assert_eq!(
+        assert_success(run(&root, &["print", "version", "--version", "8.1.1.7"])),
+        "8.1.1.7\n"
+    );
+    assert_eq!(
+        assert_success(run(&root, &["print", "version", "--version", "8.1.1.10"])),
+        "8.1.1.10\n"
+    );
+    assert_eq!(
         assert_success(run(&root, &["print", "version", "--version", "latest"])),
-        "3.10.0\n"
+        "8.1.1.10.2\n"
     );
 }
 
 #[test]
-fn print_version_prefers_unlabeled_exact_semver_match() {
+fn print_version_accepts_single_and_two_part_versions() {
+    let root = temp_root("version-short");
+    init(&root);
+    for version in ["8", "8.1"] {
+        mkdir_release(&root, version);
+    }
+
+    assert_eq!(
+        assert_success(run(&root, &["print", "version", "--version", "8"])),
+        "8\n"
+    );
+    assert_eq!(
+        assert_success(run(&root, &["print", "version", "--version", "8.1"])),
+        "8.1\n"
+    );
+}
+
+#[test]
+fn print_version_prefers_unlabeled_exact_three_part_match() {
     let root = temp_root("label-prefer-base");
     init(&root);
     for version in ["3.9.9_arm64", "3.9.9", "3.9.9_internal"] {
@@ -292,7 +332,7 @@ fn print_version_prefers_unlabeled_exact_semver_match() {
 }
 
 #[test]
-fn print_version_reports_ambiguous_labeled_exact_semver_match() {
+fn print_version_reports_ambiguous_labeled_exact_three_part_match() {
     let root = temp_root("label-ambiguous");
     init(&root);
     for version in ["3.9.9_arm64", "3.9.9_internal"] {
