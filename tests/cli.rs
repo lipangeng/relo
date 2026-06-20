@@ -311,6 +311,35 @@ fn print_version_accepts_single_and_two_part_versions() {
 }
 
 #[test]
+fn print_version_accepts_v_prefixed_versions() {
+    let root = temp_root("version-v-prefix");
+    init(&root);
+    for version in ["v1.2.3", "V1.2.4", "v1.3.0_arm64"] {
+        mkdir_release(&root, version);
+    }
+
+    assert_eq!(
+        assert_success(run(&root, &["print", "version", "--version", "v1.2"])),
+        "V1.2.4\n"
+    );
+    assert_eq!(
+        assert_success(run(&root, &["print", "version", "--version", "V1.2.3"])),
+        "v1.2.3\n"
+    );
+    assert_eq!(
+        assert_success(run(&root, &["print", "version", "--version", "1.3.0"])),
+        "v1.3.0_arm64\n"
+    );
+    assert_eq!(
+        assert_success(run(
+            &root,
+            &["print", "version", "--version", "v1.3.0_arm64"]
+        )),
+        "v1.3.0_arm64\n"
+    );
+}
+
+#[test]
 fn print_version_prefers_unlabeled_exact_three_part_match() {
     let root = temp_root("label-prefer-base");
     init(&root);

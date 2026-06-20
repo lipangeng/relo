@@ -71,7 +71,7 @@ cargo run -- -d /opt/relo/maven init
 
 共享 home 模式下，所有 release 共用 `<context>/home`。版本独立 home 模式下，每个 release 使用 `<context>/homes/<version>`。
 
-release 目录名必须是 `<version>` 或 `<version>_<label>`，其中 `<version>` 是一段或多段的点分数字版本，例如 `8`、`8.1`、`3.9.9`、`8.1.1.7`、`3.9.9_arm64`、`1.12.0_darwin-arm64`。版本比较只使用 `_` 前面的数字版本部分。
+release 目录名必须是 `<version>` 或 `<version>_<label>`，其中 `<version>` 是一段或多段的点分数字版本，也可以用 `v` 或 `V` 开头，例如 `8`、`8.1`、`v3.9.9`、`8.1.1.7`、`3.9.9_arm64`、`V1.12.0_darwin-arm64`。版本比较只使用 `_` 前面的数字版本部分，并忽略可选的 `v` 或 `V` 前缀。
 
 ## 快速开始
 
@@ -89,9 +89,9 @@ relo list
 ```bash
 mkdir -p ~/Documents/30_Toolchain/relo
 ./relo -d ~/Documents/30_Toolchain/relo init
-mkdir -p ~/Documents/30_Toolchain/relo/releases/0.1.4/bin
-cp ./relo ~/Documents/30_Toolchain/relo/releases/0.1.4/bin/relo
-~/Documents/30_Toolchain/relo/releases/0.1.4/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.1.4
+mkdir -p ~/Documents/30_Toolchain/relo/releases/0.1.5/bin
+cp ./relo ~/Documents/30_Toolchain/relo/releases/0.1.5/bin/relo
+~/Documents/30_Toolchain/relo/releases/0.1.5/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.1.5
 ```
 
 之后可以把 `~/Documents/30_Toolchain/relo/active/bin` 加入 shell 的 `PATH`，或者直接从这个 active 路径调用 `relo`。

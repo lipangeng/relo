@@ -36,7 +36,7 @@ Versioned home mode:
 └── relo.yaml
 ```
 
-Release directories must be named as `<version>` or `<version>_<label>`, where `<version>` is a dotted numeric version with one or more parts. Examples: `8`, `8.1`, `3.9.9`, `8.1.1.7`, `3.9.9_arm64`, or `1.12.0_darwin-arm64`. Version comparison uses only the numeric version before `_`.
+Release directories must be named as `<version>` or `<version>_<label>`, where `<version>` is a dotted numeric version with one or more parts and may start with `v` or `V`. Examples: `8`, `8.1`, `v3.9.9`, `8.1.1.7`, `3.9.9_arm64`, or `V1.12.0_darwin-arm64`. Version comparison uses only the numeric version before `_`, ignoring an optional leading `v` or `V`.
 
 ## Commands
 
@@ -82,9 +82,9 @@ You can also use a downloaded `relo` binary to initialize a context for managing
 ```bash
 mkdir -p ~/Documents/30_Toolchain/relo
 ./relo -d ~/Documents/30_Toolchain/relo init
-mkdir -p ~/Documents/30_Toolchain/relo/releases/0.1.4/bin
-cp ./relo ~/Documents/30_Toolchain/relo/releases/0.1.4/bin/relo
-~/Documents/30_Toolchain/relo/releases/0.1.4/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.1.4
+mkdir -p ~/Documents/30_Toolchain/relo/releases/0.1.5/bin
+cp ./relo ~/Documents/30_Toolchain/relo/releases/0.1.5/bin/relo
+~/Documents/30_Toolchain/relo/releases/0.1.5/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.1.5
 ```
 
 After that, add `~/Documents/30_Toolchain/relo/active/bin` to your shell `PATH`, or invoke `relo` from that active path.

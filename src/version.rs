@@ -18,6 +18,10 @@ pub struct DottedVersion {
 
 impl DottedVersion {
     fn parse(value: &str) -> Result<Self> {
+        let value = value
+            .strip_prefix('v')
+            .or_else(|| value.strip_prefix('V'))
+            .unwrap_or(value);
         let parts = value
             .split('.')
             .map(|part| {
