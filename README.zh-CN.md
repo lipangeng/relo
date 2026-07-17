@@ -89,9 +89,9 @@ relo list
 ```bash
 mkdir -p ~/Documents/30_Toolchain/relo
 ./relo -d ~/Documents/30_Toolchain/relo init
-mkdir -p ~/Documents/30_Toolchain/relo/releases/0.1.5/bin
-cp ./relo ~/Documents/30_Toolchain/relo/releases/0.1.5/bin/relo
-~/Documents/30_Toolchain/relo/releases/0.1.5/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.1.5
+mkdir -p ~/Documents/30_Toolchain/relo/releases/0.1.6/bin
+cp ./relo ~/Documents/30_Toolchain/relo/releases/0.1.6/bin/relo
+~/Documents/30_Toolchain/relo/releases/0.1.6/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.1.6
 ```
 
 之后可以把 `~/Documents/30_Toolchain/relo/active/bin` 加入 shell 的 `PATH`，或者直接从这个 active 路径调用 `relo`。
@@ -112,6 +112,7 @@ relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
 relo [-d <dir>] use -g [version]
 relo [-d <dir>] print <context|ctx|active|release|home|version|path|env> [--version <version>]
 relo [-d <dir>] config [show]
+relo [-d <dir>] mac unblock [-v] [version]
 relo init zsh
 relo init bash
 relo init powershell
@@ -127,6 +128,22 @@ RELO_CTX=/opt/relo/maven relo use -g 3.9.9
 ```
 
 `-d` 的优先级高于 `RELO_CONTEXT` 和 `RELO_CTX`。
+
+### macOS 隔离属性
+
+macOS 可能会给从浏览器等渠道下载的软件添加 `com.apple.quarantine` 隔离属性。如果你已经确认 release 的来源可信，可以显式移除该属性：
+
+```bash
+relo mac unblock 3.9.9
+```
+
+省略版本时，与其他需要 release 上下文的命令相同：优先选择 active release，否则选择 latest。该命令只递归移除选中 release 的隔离属性，不修改文件内容、执行权限、代码签名或系统 Gatekeeper 设置。它不会在 `init` 或 `use` 时自动执行。
+
+传入 `-v` 或 `--verbose` 会将选中的版本、release 路径、隔离属性名和递归模式输出到 stderr，并在删除前通过 `xattr` 的 verbose 读取模式显示实际带有隔离属性的路径：
+
+```bash
+relo mac unblock -v 3.9.9
+```
 
 ## 常见工作流
 

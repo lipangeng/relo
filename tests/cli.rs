@@ -104,6 +104,27 @@ fn write_config(root: &Path, text: &str) {
     fs::write(root.join("relo.yaml"), text).unwrap();
 }
 
+#[cfg(target_os = "macos")]
+fn set_quarantine(path: &Path) {
+    let output = Command::new("/usr/bin/xattr")
+        .args(["-w", "com.apple.quarantine", "relo-test"])
+        .arg(path)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", stderr(&output));
+}
+
+#[cfg(target_os = "macos")]
+fn has_quarantine(path: &Path) -> bool {
+    Command::new("/usr/bin/xattr")
+        .args(["-p", "com.apple.quarantine"])
+        .arg(path)
+        .output()
+        .unwrap()
+        .status
+        .success()
+}
+
 #[test]
 fn init_creates_shared_layout_and_config() {
     let root = temp_root("init-shared");
@@ -121,6 +142,64 @@ fn init_creates_shared_layout_and_config() {
     assert!(!config.contains("path:"));
     assert!(!config.contains("env:"));
     assert!(!config.contains("releases:"));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn mac_unblock_removes_only_the_selected_release_quarantine_attributes() {
+    let root = temp_root("mac-unblock-selected");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+    mkdir_release(&root, "2.0.0");
+
+    let selected = root.join("releases/1.0.0");
+    let selected_bin = selected.join("bin");
+    let untouched = root.join("releases/2.0.0");
+    set_quarantine(&selected);
+    set_quarantine(&selected_bin);
+    set_quarantine(&untouched);
+    assert!(has_quarantine(&selected));
+    assert!(has_quarantine(&selected_bin));
+    assert!(has_quarantine(&untouched));
+
+    let (out, err) = assert_success_output(run(&root, &["mac", "unblock", "-v", "1.0"]));
+
+    assert!(out.contains("unblocked: 1.0.0"));
+    assert!(err.contains("version: 1.0.0"));
+    assert!(err.contains(&format!("release: {}", selected.display())));
+    assert!(err.contains("attribute: com.apple.quarantine"));
+    assert!(err.contains("recursive: yes"));
+    assert!(
+        err.contains(&selected_bin.display().to_string()),
+        "expected xattr verbose output for selected bin\nstderr:\n{err}"
+    );
+    assert!(!has_quarantine(&selected));
+    assert!(!has_quarantine(&selected_bin));
+    assert!(has_quarantine(&untouched));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn mac_unblock_is_idempotent_and_uses_the_default_release() {
+    let root = temp_root("mac-unblock-default");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+    mkdir_release(&root, "2.0.0");
+    assert_success(run(&root, &["use", "-g", "1.0.0"]));
+
+    let out = assert_success(run(&root, &["mac", "unblock"]));
+    assert_eq!(out, "unblocked: 1.0.0\n");
+}
+
+#[cfg(not(target_os = "macos"))]
+#[test]
+fn mac_unblock_reports_unsupported_platform() {
+    let root = temp_root("mac-unblock-platform");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+
+    let err = assert_failure(run(&root, &["mac", "unblock", "1.0.0"]));
+    assert!(err.contains("mac unblock is only supported on macOS"));
 }
 
 #[test]

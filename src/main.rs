@@ -2,12 +2,13 @@ mod cli;
 mod config;
 mod error;
 mod layout;
+mod macos;
 mod shell;
 mod version;
 
 use anyhow::Result;
 use clap::{CommandFactory, Parser};
-use cli::{Cli, Command, ConfigCommand, HomeArg, InitTarget, PrintTarget, ShellArg};
+use cli::{Cli, Command, ConfigCommand, HomeArg, InitTarget, MacCommand, PrintTarget, ShellArg};
 use layout::Layout;
 use shell::ShellKind;
 use std::path::PathBuf;
@@ -194,6 +195,27 @@ fn run() -> Result<()> {
             ConfigCommand::Show => {
                 let layout = Layout::load(root)?;
                 print!("{}", std::fs::read_to_string(layout.config_path())?);
+            }
+        },
+        Command::Mac { command } => match command {
+            MacCommand::Unblock { verbose, version } => {
+                macos::ensure_supported()?;
+                let layout = Layout::load(root)?;
+                let release = print_release(&layout, version.as_deref())?;
+                if verbose > 0 {
+                    eprintln!("version: {}", release.id);
+                    eprintln!("release: {}", release.path.display());
+                    eprintln!("attribute: com.apple.quarantine");
+                    eprintln!("recursive: yes");
+                }
+                let command_output = macos::unblock(&release.path, verbose > 0)?;
+                if !command_output.is_empty() {
+                    eprint!("{command_output}");
+                    if !command_output.ends_with('\n') {
+                        eprintln!();
+                    }
+                }
+                println!("unblocked: {}", release.id);
             }
         },
     }

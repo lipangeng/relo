@@ -55,6 +55,11 @@ pub enum Command {
         #[command(subcommand)]
         command: Option<ConfigCommand>,
     },
+    /// macOS-specific release helpers
+    Mac {
+        #[command(subcommand)]
+        command: MacCommand,
+    },
 }
 
 #[derive(Clone, ValueEnum)]
@@ -101,6 +106,21 @@ impl PrintTarget {
 #[derive(Clone, Subcommand)]
 pub enum ConfigCommand {
     Show,
+}
+
+#[derive(Clone, Subcommand)]
+pub enum MacCommand {
+    /// Remove the macOS quarantine attribute from a release
+    Unblock {
+        #[arg(
+            short = 'v',
+            long = "verbose",
+            action = clap::ArgAction::Count,
+            help = "Show release and quarantine details"
+        )]
+        verbose: u8,
+        version: Option<String>,
+    },
 }
 
 #[derive(Clone, Copy, ValueEnum)]

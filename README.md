@@ -50,10 +50,27 @@ relo [-d <dir>] use --shell <posix|powershell|cmd> [version]
 relo [-d <dir>] use -g [version]
 relo [-d <dir>] print <context|ctx|active|release|home|version|path|env> [--version <version>]
 relo [-d <dir>] config [show]
+relo [-d <dir>] mac unblock [-v] [version]
 relo init zsh
 relo init bash
 relo init powershell
 relo init cmd
+```
+
+### macOS quarantine attributes
+
+macOS may add the `com.apple.quarantine` attribute to software downloaded through a browser or a similar channel. After verifying that a release comes from a trusted source, remove the attribute explicitly with:
+
+```bash
+relo mac unblock 3.9.9
+```
+
+When the version is omitted, relo selects the active release, or `latest` when no release is active. This command recursively removes only the quarantine attribute from the selected release. It does not modify file contents, executable permissions, code signatures, or system Gatekeeper settings, and it never runs automatically during `init` or `use`.
+
+Pass `-v` or `--verbose` to print the selected version, release path, quarantine attribute name, and recursive mode to stderr. Before removal, relo also uses `xattr`'s verbose read mode to report the paths that have the quarantine attribute:
+
+```bash
+relo mac unblock -v 3.9.9
 ```
 
 `-d` selects the context directory. If `-d` is omitted, `relo` uses
@@ -82,9 +99,9 @@ You can also use a downloaded `relo` binary to initialize a context for managing
 ```bash
 mkdir -p ~/Documents/30_Toolchain/relo
 ./relo -d ~/Documents/30_Toolchain/relo init
-mkdir -p ~/Documents/30_Toolchain/relo/releases/0.1.5/bin
-cp ./relo ~/Documents/30_Toolchain/relo/releases/0.1.5/bin/relo
-~/Documents/30_Toolchain/relo/releases/0.1.5/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.1.5
+mkdir -p ~/Documents/30_Toolchain/relo/releases/0.1.6/bin
+cp ./relo ~/Documents/30_Toolchain/relo/releases/0.1.6/bin/relo
+~/Documents/30_Toolchain/relo/releases/0.1.6/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.1.6
 ```
 
 After that, add `~/Documents/30_Toolchain/relo/active/bin` to your shell `PATH`, or invoke `relo` from that active path.
