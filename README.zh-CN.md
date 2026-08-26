@@ -26,6 +26,10 @@ cargo build --release
 target/release/relo
 ```
 
+GitHub Release 分别提供 Linux、macOS 和 Windows 的 `x64` 与 `arm64` 压缩包，
+统一命名为 `relo-<os>-<arch>`。Windows 发布二进制会静态链接 MSVC 运行库，
+不要求用户另外安装 Visual C++ Redistributable。
+
 开发时可直接运行：
 
 ```bash
@@ -89,9 +93,9 @@ relo list
 ```bash
 mkdir -p ~/Documents/30_Toolchain/relo
 ./relo -d ~/Documents/30_Toolchain/relo init
-mkdir -p ~/Documents/30_Toolchain/relo/releases/0.1.6/bin
-cp ./relo ~/Documents/30_Toolchain/relo/releases/0.1.6/bin/relo
-~/Documents/30_Toolchain/relo/releases/0.1.6/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.1.6
+mkdir -p ~/Documents/30_Toolchain/relo/releases/0.1.7/bin
+cp ./relo ~/Documents/30_Toolchain/relo/releases/0.1.7/bin/relo
+~/Documents/30_Toolchain/relo/releases/0.1.7/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.1.7
 ```
 
 之后可以把 `~/Documents/30_Toolchain/relo/active/bin` 加入 shell 的 `PATH`，或者直接从这个 active 路径调用 `relo`。

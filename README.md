@@ -12,6 +12,19 @@ It manages user-provided software release directories. It does not download, ins
 
 It is suitable for tools such as JDK, Maven, Gradle, Node, Go, protoc, internal CLIs, and versioned binary distributions.
 
+## Installation and builds
+
+GitHub releases provide `x64` and `arm64` archives for Linux, macOS, and
+Windows, named `relo-<os>-<arch>`. Windows release binaries statically link the
+MSVC runtime, so they do not require a separate Visual C++ Redistributable
+installation.
+
+Build from source with:
+
+```bash
+cargo build --release
+```
+
 A relo context is one managed software-release directory. `context` is the primary term; `ctx` is the supported short form.
 
 ## Layout
@@ -99,9 +112,9 @@ You can also use a downloaded `relo` binary to initialize a context for managing
 ```bash
 mkdir -p ~/Documents/30_Toolchain/relo
 ./relo -d ~/Documents/30_Toolchain/relo init
-mkdir -p ~/Documents/30_Toolchain/relo/releases/0.1.6/bin
-cp ./relo ~/Documents/30_Toolchain/relo/releases/0.1.6/bin/relo
-~/Documents/30_Toolchain/relo/releases/0.1.6/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.1.6
+mkdir -p ~/Documents/30_Toolchain/relo/releases/0.1.7/bin
+cp ./relo ~/Documents/30_Toolchain/relo/releases/0.1.7/bin/relo
+~/Documents/30_Toolchain/relo/releases/0.1.7/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.1.7
 ```
 
 After that, add `~/Documents/30_Toolchain/relo/active/bin` to your shell `PATH`, or invoke `relo` from that active path.
