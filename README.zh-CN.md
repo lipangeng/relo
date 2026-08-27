@@ -98,9 +98,9 @@ relo list
 ```bash
 mkdir -p ~/Documents/30_Toolchain/relo
 ./relo -d ~/Documents/30_Toolchain/relo init
-mkdir -p ~/Documents/30_Toolchain/relo/releases/0.2.0/bin
-cp ./relo ~/Documents/30_Toolchain/relo/releases/0.2.0/bin/relo
-~/Documents/30_Toolchain/relo/releases/0.2.0/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.2.0
+mkdir -p ~/Documents/30_Toolchain/relo/releases/0.2.1/bin
+cp ./relo ~/Documents/30_Toolchain/relo/releases/0.2.1/bin/relo
+~/Documents/30_Toolchain/relo/releases/0.2.1/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.2.1
 ```
 
 之后可以把 `~/Documents/30_Toolchain/relo/active/bin` 加入 shell 的 `PATH`，或者直接从这个 active 路径调用 `relo`。
