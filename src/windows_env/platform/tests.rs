@@ -1,5 +1,5 @@
 use super::*;
-use crate::windows_env::model::DesiredContext;
+use crate::windows_env::model::{DesiredContext, PATH_APPEND};
 use crate::windows_env::protocol::context_id_from_normalized;
 use crate::windows_env::reconcile::{plan_apply, plan_remove};
 use std::collections::BTreeMap;
@@ -65,6 +65,76 @@ fn persistent_environment_is_visible_in_a_fresh_user_environment_block() {
         panic!("failed to restore Windows integration-test environment: {error:#}");
     }
     result.unwrap();
+}
+
+#[test]
+fn path_expansion_supports_one_and_two_levels_of_user_variables() {
+    if std::env::var_os("RELO_WINDOWS_ENV_INTEGRATION").as_deref()
+        != Some(std::ffi::OsStr::new("1"))
+    {
+        return;
+    }
+
+    let _guard = lock(Scope::User).unwrap();
+    let before = read(Scope::User).unwrap();
+    let nonce = std::process::id();
+    let provider_name = format!("RELO_PATH_EXPANSION_TEST_{nonce}");
+    let provider_reference = format!("%{provider_name}%");
+    let concrete_path = format!(r"C:\RELO-PATH-EXPANSION-{nonce}\BIN");
+
+    let result = (|| -> Result<()> {
+        let mut one_level = before.clone();
+        one_level.set(EnvValue::expandable(&provider_name, &concrete_path));
+        one_level.set(EnvValue::expandable("Path", &provider_reference));
+        apply(
+            Scope::User,
+            &Plan::between(before.clone(), one_level.clone(), false, Vec::new()),
+        )?;
+        require_path_entry(
+            &fresh_user_environment()?,
+            &concrete_path,
+            "one-level Path -> context provider expansion",
+        )?;
+
+        let mut two_levels = one_level.clone();
+        two_levels.set(EnvValue::expandable(PATH_APPEND, &provider_reference));
+        two_levels.set(EnvValue::expandable("Path", format!("%{PATH_APPEND}%")));
+        apply(
+            Scope::User,
+            &Plan::between(one_level, two_levels, false, Vec::new()),
+        )?;
+        require_path_entry(
+            &fresh_user_environment()?,
+            &concrete_path,
+            "two-level Path -> aggregate -> context provider expansion",
+        )?;
+        Ok(())
+    })();
+
+    let cleanup = read(Scope::User).and_then(|current| {
+        let restore = Plan::between(current, before, false, Vec::new());
+        apply(Scope::User, &restore)
+    });
+    if let Err(error) = cleanup {
+        panic!("failed to restore Windows PATH expansion test environment: {error:#}");
+    }
+    result.unwrap();
+}
+
+fn require_path_entry(
+    environment: &BTreeMap<String, String>,
+    expected: &str,
+    scenario: &str,
+) -> Result<()> {
+    let effective_path = environment.get("PATH").cloned().unwrap_or_default();
+    if effective_path
+        .split(';')
+        .any(|entry| entry.eq_ignore_ascii_case(expected))
+    {
+        Ok(())
+    } else {
+        bail!("{scenario} failed; effective Path was {effective_path:?}")
+    }
 }
 
 fn fresh_user_environment() -> Result<BTreeMap<String, String>> {
