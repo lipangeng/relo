@@ -6,8 +6,8 @@ pub enum ReloError {
     NotRoot(String),
     #[error("missing releases directory: {0}")]
     MissingReleases(String),
-    #[error("active exists but is not a symlink: {0}")]
-    ActiveNotSymlink(String),
+    #[error("active exists but is not a managed link: {0}")]
+    ActiveNotManagedLink(String),
     #[error("active points to missing release: {0}")]
     ActiveMissing(String),
     #[error("active points to invalid target: {0}")]

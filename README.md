@@ -49,6 +49,12 @@ Versioned home mode:
 └── relo.yaml
 ```
 
+On Unix, `active` is a relative directory symlink. On Windows, it is an NTFS
+directory junction, so global activation does not require Developer Mode or an
+elevated terminal. Junctions store an absolute target: after moving a Windows
+context, run `relo use -g <version>` to rebuild `active`. Windows contexts used
+with global activation must be on NTFS.
+
 Release directories must be named as `<version>` or `<version>_<label>`, where `<version>` is a dotted numeric version with one or more parts and may start with `v` or `V`. Examples: `8`, `8.1`, `v3.9.9`, `8.1.1.7`, `3.9.9_arm64`, or `V1.12.0_darwin-arm64`. Version comparison uses only the numeric version before `_`, ignoring an optional leading `v` or `V`.
 
 ## Commands
@@ -266,12 +272,12 @@ If values may contain spaces, use a line-preserving loop instead so each
 while IFS= read -r entry; do export "$entry"; done < <(relo print env)
 ```
 
-Relative paths are resolved against the relo context. Absolute paths are allowed. Use variables when a path should point at the selected release, home, active symlink, or context directory:
+Relative paths are resolved against the relo context. Absolute paths are allowed. Use variables when a path should point at the selected release, home, active managed link, or context directory:
 
 ```text
 ${relo.release}/bin  -> selected release/bin
 ${relo.home}/bin     -> selected home/bin
-${relo.active}/bin   -> active symlink/bin
+${relo.active}/bin   -> active managed-link/bin
 ${relo.context}/bin  -> context/bin
 ${relo.ctx}/bin      -> context/bin
 tools/bin            -> context/tools/bin
@@ -327,7 +333,7 @@ releases:
 ```text
 ${relo.context}    relo context directory
 ${relo.ctx}        relo context directory
-${relo.active}     active symlink path
+${relo.active}     active managed-link path
 ${relo.release}    selected release directory
 ${relo.home}       selected home directory
 ${relo.version}    selected release id
@@ -339,6 +345,6 @@ ${sys.NAME}        inherited system environment variable
 
 `${relo.root}` is kept as a compatibility alias for `${relo.context}`, but new configuration should use `${relo.context}` or `${relo.ctx}`.
 
-`${relo.active}` is the active symlink path itself, for example `<context>/active`. It is not the resolved release directory; use `${relo.release}` for the selected release directory.
+`${relo.active}` is the active managed-link path itself, for example `<context>/active`. It is not the resolved release directory; use `${relo.release}` for the selected release directory.
 
 Release-specific `path` entries are added before global path entries. `path` is expanded after env, so it can reference final `${env.NAME}` values. Path entries may be absolute or relative; relative path entries are resolved under the relo context. Leading `~` is expanded to the current user's home directory in both env and path values. Env values are not otherwise treated as paths. Local `relo use` exports only configured `env` values and `PATH`; it does not inject implicit relo variables. `relo use -g` only updates `active`; temporary `--path` overrides are valid only for local use.

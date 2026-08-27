@@ -34,6 +34,14 @@ impl Layout {
     }
 
     pub fn load(root: PathBuf) -> Result<Self> {
+        Self::load_with_active_validation(root, true)
+    }
+
+    pub fn load_for_activation(root: PathBuf) -> Result<Self> {
+        Self::load_with_active_validation(root, false)
+    }
+
+    fn load_with_active_validation(root: PathBuf, validate_active: bool) -> Result<Self> {
         let config_path = root.join("relo.yaml");
         if !config_path.is_file() {
             return Err(ReloError::NotRoot(root.display().to_string()).into());
@@ -44,8 +52,10 @@ impl Layout {
         }
         let config = Config::read(&config_path)?;
         let layout = Self { root, config };
-        // Validate active eagerly so commands fail before printing partial data.
-        layout.validate_active()?;
+        if validate_active {
+            // Validate active eagerly so commands fail before printing partial data.
+            layout.validate_active()?;
+        }
         Ok(layout)
     }
 
@@ -108,11 +118,8 @@ impl Layout {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(err.into()),
         };
-        if !meta.file_type().is_symlink() {
-            return Err(ReloError::ActiveNotSymlink(active.display().to_string()).into());
-        }
-        let target = fs::read_link(&active)?;
-        let id = active_release_id(&target)?;
+        let target = active_link_target(&active, &meta)?;
+        let id = active_release_id(&target, &self.root)?;
         if !self.release_path(&id).is_dir() {
             return Err(ReloError::ActiveMissing(id).into());
         }
@@ -129,15 +136,12 @@ impl Layout {
 
     pub fn set_active(&self, id: &str) -> Result<()> {
         let active = self.active_path();
-        if active.exists() || fs::symlink_metadata(&active).is_ok() {
-            let meta = fs::symlink_metadata(&active)?;
-            if !meta.file_type().is_symlink() {
-                return Err(ReloError::ActiveNotSymlink(active.display().to_string()).into());
-            }
-            remove_active_symlink(&active)?;
-        }
-        // Store a relative link so a managed context can be moved as a directory.
-        create_symlink(Path::new("releases").join(id), active)?;
+        let existing_target = match fs::symlink_metadata(&active) {
+            Ok(meta) => Some(active_link_target(&active, &meta)?),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+            Err(err) => return Err(err.into()),
+        };
+        replace_active_link(&self.root, id, &active, existing_target.as_deref())?;
         Ok(())
     }
 
@@ -285,31 +289,84 @@ fn normalize_expanded_env_value(value: &str) -> String {
 }
 
 #[cfg(unix)]
-fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q) -> Result<()> {
-    std::os::unix::fs::symlink(src, dst)?;
-    Ok(())
+fn active_link_target(path: &Path, meta: &fs::Metadata) -> Result<PathBuf> {
+    if !meta.file_type().is_symlink() {
+        return Err(ReloError::ActiveNotManagedLink(path.display().to_string()).into());
+    }
+    Ok(fs::read_link(path)?)
+}
+
+#[cfg(windows)]
+fn active_link_target(path: &Path, meta: &fs::Metadata) -> Result<PathBuf> {
+    if meta.file_type().is_symlink() {
+        return Ok(fs::read_link(path)?);
+    }
+    junction::get_target(path)
+        .map_err(|_| ReloError::ActiveNotManagedLink(path.display().to_string()).into())
 }
 
 #[cfg(unix)]
-fn remove_active_symlink(path: &Path) -> Result<()> {
-    fs::remove_file(path)?;
+fn replace_active_link(
+    _root: &Path,
+    id: &str,
+    active: &Path,
+    existing_target: Option<&Path>,
+) -> Result<()> {
+    if existing_target.is_some() {
+        fs::remove_file(active)?;
+    }
+    // Unix symlinks stay relative so the context remains movable.
+    std::os::unix::fs::symlink(Path::new("releases").join(id), active)?;
     Ok(())
 }
 
 #[cfg(windows)]
-fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q) -> Result<()> {
-    std::os::windows::fs::symlink_dir(src, dst)?;
+fn replace_active_link(
+    root: &Path,
+    id: &str,
+    active: &Path,
+    existing_target: Option<&Path>,
+) -> Result<()> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let staged = root.join(format!(".relo-active-{}-{nonce}", std::process::id()));
+    let target = root.join("releases").join(id);
+
+    // Creating the replacement first keeps the old active link intact if the
+    // filesystem cannot create junctions (for example, on a non-NTFS volume).
+    junction::create(&target, &staged)?;
+    if existing_target.is_some() {
+        if let Err(err) = fs::remove_dir(active) {
+            let _ = fs::remove_dir(&staged);
+            return Err(err.into());
+        }
+    }
+    if let Err(err) = fs::rename(&staged, active) {
+        if let Some(old_target) = existing_target {
+            let old_target = if old_target.is_absolute() {
+                old_target.to_path_buf()
+            } else {
+                root.join(old_target)
+            };
+            let _ = junction::create(old_target, active);
+        }
+        let _ = fs::remove_dir(&staged);
+        return Err(err.into());
+    }
     Ok(())
 }
 
-#[cfg(windows)]
-fn remove_active_symlink(path: &Path) -> Result<()> {
-    fs::remove_dir(path)?;
-    Ok(())
-}
-
-fn active_release_id(target: &Path) -> Result<String> {
-    let mut components = target.components();
+fn active_release_id(target: &Path, root: &Path) -> Result<String> {
+    let relative = if target.is_absolute() {
+        absolute_active_target(target, root)?
+    } else {
+        Cow::Borrowed(target)
+    };
+    let mut components = relative.components();
     match (components.next(), components.next(), components.next()) {
         (Some(Component::Normal(first)), Some(Component::Normal(second)), None)
             if first == OsStr::new("releases") =>
@@ -320,5 +377,31 @@ fn active_release_id(target: &Path) -> Result<String> {
                 .ok_or_else(|| ReloError::ActiveInvalidTarget(target.display().to_string()).into())
         }
         _ => Err(ReloError::ActiveInvalidTarget(target.display().to_string()).into()),
+    }
+}
+
+fn absolute_active_target<'a>(target: &'a Path, root: &Path) -> Result<Cow<'a, Path>> {
+    #[cfg(windows)]
+    let root = strip_verbatim_prefix(root);
+    #[cfg(not(windows))]
+    let root = Cow::Borrowed(root);
+
+    #[cfg(windows)]
+    let target = strip_verbatim_prefix(target);
+    #[cfg(not(windows))]
+    let target = Cow::Borrowed(target);
+
+    target
+        .strip_prefix(root.as_ref())
+        .map(|path| Cow::Owned(path.to_path_buf()))
+        .map_err(|_| ReloError::ActiveInvalidTarget(target.display().to_string()).into())
+}
+
+#[cfg(windows)]
+fn strip_verbatim_prefix(path: &Path) -> Cow<'_, Path> {
+    let value = path.to_string_lossy();
+    match value.strip_prefix(r"\\?\") {
+        Some(value) => Cow::Owned(PathBuf::from(value)),
+        None => Cow::Borrowed(path),
     }
 }

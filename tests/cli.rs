@@ -88,6 +88,24 @@ fn mkdir_release(root: &Path, name: &str) {
     fs::create_dir_all(root.join("releases").join(name).join("bin")).unwrap();
 }
 
+#[cfg(unix)]
+fn assert_active_target(root: &Path, version: &str) {
+    assert_eq!(
+        fs::read_link(root.join("active")).unwrap(),
+        PathBuf::from("releases").join(version)
+    );
+}
+
+#[cfg(windows)]
+fn assert_active_target(root: &Path, version: &str) {
+    let active = root.join("active");
+    assert!(junction::exists(&active).unwrap());
+    assert_eq!(
+        fs::canonicalize(junction::get_target(active).unwrap()).unwrap(),
+        fs::canonicalize(root.join("releases").join(version)).unwrap()
+    );
+}
+
 fn shell_escape_path(path: &Path) -> String {
     path.display()
         .to_string()
@@ -668,10 +686,7 @@ fn global_use_updates_active_and_list_marks_it() {
 
     assert_success(run(&root, &["use", "-g", "3.9"]));
     assert_eq!(assert_success(run(&root, &["print", "version"])), "3.9.9\n");
-    assert_eq!(
-        fs::read_link(root.join("active")).unwrap(),
-        PathBuf::from("releases/3.9.9")
-    );
+    assert_active_target(&root, "3.9.9");
 
     let list = assert_success(run(&root, &["list"]));
     assert!(list.contains("  3.8.8"));
@@ -1165,10 +1180,7 @@ fn global_use_without_version_uses_latest_release() {
 
     assert_success(run(&root, &["use", "-g"]));
 
-    assert_eq!(
-        fs::read_link(root.join("active")).unwrap(),
-        PathBuf::from("releases/2.0.0")
-    );
+    assert_active_target(&root, "2.0.0");
     assert_eq!(assert_success(run(&root, &["print", "version"])), "2.0.0\n");
 }
 
@@ -1182,10 +1194,25 @@ fn global_use_without_version_keeps_active_release() {
 
     assert_success(run(&root, &["use", "-g"]));
 
-    assert_eq!(
-        fs::read_link(root.join("active")).unwrap(),
-        PathBuf::from("releases/1.0.0")
-    );
+    assert_active_target(&root, "1.0.0");
+}
+
+#[cfg(windows)]
+#[test]
+fn global_use_repairs_a_junction_after_the_context_moves() {
+    let root = temp_root("global-moved-context");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+    assert_success(run(&root, &["use", "-g", "1.0.0"]));
+
+    let moved = root.with_file_name(format!(
+        "{}-moved",
+        root.file_name().unwrap().to_string_lossy()
+    ));
+    fs::rename(&root, &moved).unwrap();
+
+    assert_success(run(&moved, &["use", "-g", "latest"]));
+    assert_active_target(&moved, "1.0.0");
 }
 
 #[test]

@@ -134,7 +134,11 @@ fn run() -> Result<()> {
                 );
                 return Ok(());
             }
-            let layout = Layout::load(root)?;
+            let layout = if global {
+                Layout::load_for_activation(root)?
+            } else {
+                Layout::load(root)?
+            };
             if global && !path.is_empty() {
                 anyhow::bail!("path overrides are only valid for local use");
             }

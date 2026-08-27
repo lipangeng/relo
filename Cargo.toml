@@ -23,5 +23,8 @@ windows-sys = { version = "0.61", features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 
+[target.'cfg(windows)'.dependencies]
+junction = "2"
+
 [features]
 check-windows = []

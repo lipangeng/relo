@@ -73,6 +73,11 @@ cargo run -- -d /opt/relo/maven init
 └── relo.yaml
 ```
 
+Unix 下的 `active` 是相对目录符号链接；Windows 下则是 NTFS 目录 junction，
+因此全局激活不需要开发者模式或管理员终端。Junction 保存绝对目标：移动 Windows
+context 后，需要运行 `relo use -g <version>` 重建 `active`。需要使用全局激活的
+Windows context 必须位于 NTFS 文件系统。
+
 共享 home 模式下，所有 release 共用 `<context>/home`。版本独立 home 模式下，每个 release 使用 `<context>/homes/<version>`。
 
 release 目录名必须是 `<version>` 或 `<version>_<label>`，其中 `<version>` 是一段或多段的点分数字版本，也可以用 `v` 或 `V` 开头，例如 `8`、`8.1`、`v3.9.9`、`8.1.1.7`、`3.9.9_arm64`、`V1.12.0_darwin-arm64`。版本比较只使用 `_` 前面的数字版本部分，并忽略可选的 `v` 或 `V` 前缀。
@@ -317,12 +322,12 @@ export $(relo print env | xargs)
 while IFS= read -r entry; do export "$entry"; done < <(relo print env)
 ```
 
-相对路径相对于 relo context 解析。绝对路径保持原样。当路径应指向选中的 release、home、active 符号链接或 context 目录时，使用变量：
+相对路径相对于 relo context 解析。绝对路径保持原样。当路径应指向选中的 release、home、active 托管链接或 context 目录时，使用变量：
 
 ```text
 ${relo.release}/bin  -> 选中的 release/bin
 ${relo.home}/bin     -> 选中的 home/bin
-${relo.active}/bin   -> active 符号链接/bin
+${relo.active}/bin   -> active 托管链接/bin
 ${relo.context}/bin  -> context/bin
 ${relo.ctx}/bin      -> context/bin
 tools/bin            -> context/tools/bin
@@ -386,7 +391,7 @@ releases:
 ```text
 ${relo.context}    relo context 目录
 ${relo.ctx}        relo context 目录
-${relo.active}     active 符号链接路径
+${relo.active}     active 托管链接路径
 ${relo.release}    选中的 release 目录
 ${relo.home}       选中的 home 目录
 ${relo.version}    选中的 release id
@@ -398,7 +403,7 @@ ${sys.NAME}        继承的系统环境变量
 
 `${relo.root}` 作为 `${relo.context}` 的兼容别名保留，但新配置应使用 `${relo.context}` 或 `${relo.ctx}`。
 
-`${relo.active}` 表示 active 符号链接路径本身，例如 `<context>/active`。它不是解析后的 release 目录；选中 release 的真实目录应使用 `${relo.release}`。
+`${relo.active}` 表示 active 托管链接路径本身，例如 `<context>/active`。Unix 使用符号链接，Windows 使用目录 junction。它不是解析后的 release 目录；选中 release 的真实目录应使用 `${relo.release}`。
 
 Release 专属的 `path` 条目排在全局 path 条目之前。`path` 在 env 展开之后展开，因此可以引用最终的 `${env.NAME}` 值。路径条目可以是绝对路径或相对路径；相对路径在 relo context 下解析。开头的 `~` 会展开为当前用户的主目录，env 和 path 值中都支持。Env 值不会被视为路径处理。Local `relo use` 只导出配置中的 `env` 值和 `PATH`，不会隐式注入 relo 内部变量。`relo use -g` 只更新 `active`；临时 `--path` 覆盖仅在 local use 时有效。
 
@@ -410,7 +415,7 @@ Release 专属的 `path` 条目排在全局 path 条目之前。`path` 在 env �
 
 `show` 不带版本时显示 context、active、release、home、home mode 和 release 数量；带版本时显示该版本的 release 路径、home 路径和是否 active。
 
-`use -g` 更新 `active` 符号链接，不输出 shell export。`use` 不带 `-g` 时输出当前 shell 可执行的环境变量脚本，并在需要时创建对应 home 目录。
+`use -g` 更新 `active` 托管链接，不输出 shell export。Unix 使用符号链接，Windows 使用目录 junction。`use` 不带 `-g` 时输出当前 shell 可执行的环境变量脚本，并在需要时创建对应 home 目录。
 
 `print` 面向脚本使用，只输出单一目标内容。`context`、`ctx` 和 `active` 不接受 `--version`；`release`、`home`、`version`、`path`、`env` 可以通过 `--version` 指定版本。
 
@@ -422,7 +427,7 @@ Release 专属的 `path` 条目排在全局 path 条目之前。`path` 在 env �
 
 `missing releases directory`：context 里缺少 `releases/` 目录。通常应重新运行 `relo init` 或手动补齐目录。
 
-`active exists but is not a symlink`：`active` 已存在但不是 relo 管理的符号链接。为了避免覆盖用户文件，`relo` 会拒绝继续。
+`active exists but is not a managed link`：`active` 已存在但不是 relo 管理的符号链接或 junction。为了避免覆盖用户文件，`relo` 会拒绝继续。
 
 `active points to missing release`：`active` 指向的 release 目录不存在。需要恢复该 release，或用 `relo use -g <version>` 切换到存在的 release。
 
