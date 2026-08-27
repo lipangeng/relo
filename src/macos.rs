@@ -1,3 +1,4 @@
+use crate::paths;
 use anyhow::Result;
 use std::path::Path;
 
@@ -39,12 +40,12 @@ pub fn unblock(release: &Path, verbose: bool) -> Result<String> {
         if detail.is_empty() {
             anyhow::bail!(
                 "failed to remove macOS quarantine attribute from {}",
-                release.display()
+                paths::display(release)
             );
         }
         anyhow::bail!(
             "failed to remove macOS quarantine attribute from {}: {}",
-            release.display(),
+            paths::display(release),
             detail
         );
     }

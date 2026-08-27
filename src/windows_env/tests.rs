@@ -2,41 +2,10 @@ use super::model::{
     DesiredContext, EnvValue, Scope, Snapshot, ValueKind, CONF_PATH_APPEND, CONF_PATH_PREPEND,
     CONTEXT_ID_LEN, PATH_APPEND, PATH_PREPEND,
 };
-use super::protocol::{
-    context_id_from_normalized, external_windows_path, validate_context_id,
-    validate_reference_cycles,
-};
+use super::protocol::{context_id_from_normalized, validate_context_id, validate_reference_cycles};
 use super::reconcile::{plan_apply, plan_remove};
 use super::status::build_status;
 use std::collections::BTreeMap;
-
-#[test]
-fn external_windows_path_removes_verbatim_disk_prefix() {
-    assert_eq!(
-        external_windows_path(r"\\?\D:\10_Software\Tools\Relo\active\bin"),
-        r"D:\10_Software\Tools\Relo\active\bin"
-    );
-}
-
-#[test]
-fn external_windows_path_converts_verbatim_unc_prefix() {
-    assert_eq!(
-        external_windows_path(r"\\?\UNC\server\share\Relo\active\bin"),
-        r"\\server\share\Relo\active\bin"
-    );
-}
-
-#[test]
-fn external_windows_path_preserves_non_verbatim_and_device_paths() {
-    assert_eq!(
-        external_windows_path(r"D:\Tools\Relo\active\bin"),
-        r"D:\Tools\Relo\active\bin"
-    );
-    assert_eq!(
-        external_windows_path(r"\\?\Volume{01234567-89ab-cdef-0123-456789abcdef}\Relo"),
-        r"\\?\Volume{01234567-89ab-cdef-0123-456789abcdef}\Relo"
-    );
-}
 
 fn desired(id: &str) -> DesiredContext {
     DesiredContext {

@@ -1,4 +1,5 @@
 use crate::layout::Layout;
+use crate::paths;
 use anyhow::Result;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,7 +35,7 @@ pub fn exports(
 
 pub fn forward<S: AsRef<str>>(args: &[S], shell: ShellKind) -> Result<String> {
     let exe = std::env::current_exe()?;
-    let exe = exe.display().to_string();
+    let exe = paths::display(&exe).into_owned();
     let args = args.iter().map(|arg| arg.as_ref()).collect::<Vec<_>>();
     let out = match shell {
         ShellKind::Posix => format!(
@@ -80,7 +81,7 @@ fn posix_exports(
     if !path.is_empty() {
         let paths = path
             .iter()
-            .map(|path| escape_posix(&path.display().to_string()))
+            .map(|path| escape_posix(&paths::display(path)))
             .collect::<Vec<_>>()
             .join(":");
         if append_path {
@@ -108,7 +109,7 @@ fn powershell_exports(
     if !path.is_empty() {
         let paths = path
             .iter()
-            .map(|path| format!("'{}'", escape_powershell(&path.display().to_string())))
+            .map(|path| format!("'{}'", escape_powershell(&paths::display(path))))
             .collect::<Vec<_>>()
             .join(" + ';' + ");
         if append_path {
@@ -136,7 +137,7 @@ fn cmd_exports(
     if !path.is_empty() {
         let paths = path
             .iter()
-            .map(|path| escape_cmd(&path.display().to_string()))
+            .map(|path| escape_cmd(&paths::display(path)))
             .collect::<Vec<_>>()
             .join(";");
         if append_path {

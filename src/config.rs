@@ -1,4 +1,5 @@
 use crate::cli::HomeArg;
+use crate::paths;
 use anyhow::{bail, Context, Result};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -89,13 +90,13 @@ impl Config {
 
     pub fn read(path: &Path) -> Result<Self> {
         let text = std::fs::read_to_string(path)
-            .with_context(|| format!("failed to read config: {}", path.display()))?;
+            .with_context(|| format!("failed to read config: {}", paths::display(path)))?;
         let mut value = default_config_value()?;
         let user_value: Value = serde_yml::from_str(&text)
-            .with_context(|| format!("invalid relo.yaml: {}", path.display()))?;
+            .with_context(|| format!("invalid relo.yaml: {}", paths::display(path)))?;
         merge_yaml(&mut value, user_value);
         let config: Self = serde_yml::from_value(value)
-            .with_context(|| format!("invalid relo.yaml: {}", path.display()))?;
+            .with_context(|| format!("invalid relo.yaml: {}", paths::display(path)))?;
         config.validate()?;
         Ok(config)
     }
@@ -105,7 +106,8 @@ impl Config {
         let mut value = serde_yml::to_value(self)?;
         prune_defaults(&mut value, &default);
         let text = serde_yml::to_string(&value)?;
-        std::fs::write(path, text).with_context(|| format!("failed to write {}", path.display()))
+        std::fs::write(path, text)
+            .with_context(|| format!("failed to write {}", paths::display(path)))
     }
 
     fn validate(&self) -> Result<()> {

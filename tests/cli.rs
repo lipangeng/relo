@@ -14,7 +14,18 @@ fn temp_root(name: &str) -> PathBuf {
         .as_nanos();
     let root = std::env::temp_dir().join(format!("relo-{name}-{nonce}"));
     fs::create_dir_all(&root).unwrap();
-    fs::canonicalize(root).unwrap()
+    let root = fs::canonicalize(root).unwrap();
+    #[cfg(windows)]
+    {
+        let value = root.to_string_lossy();
+        if let Some(value) = value.strip_prefix(r"\\?\UNC\") {
+            return PathBuf::from(format!(r"\\{value}"));
+        }
+        if let Some(value) = value.strip_prefix(r"\\?\") {
+            return PathBuf::from(value);
+        }
+    }
+    root
 }
 
 fn run(root: &Path, args: &[&str]) -> Output {
@@ -1250,4 +1261,9 @@ fn global_use_verbose_reports_selected_version_on_stderr() {
     assert!(err.contains(&format!("  MAVEN_HOME={}", release.display())));
     assert!(err.contains("path:"));
     assert!(err.contains(&format!("  {}", release.join("bin").display())));
+    #[cfg(windows)]
+    assert!(
+        !err.contains(r"\\?\"),
+        "verbose output exposed a Windows verbatim path:\n{err}"
+    );
 }

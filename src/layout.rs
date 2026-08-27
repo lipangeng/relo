@@ -1,5 +1,6 @@
 use crate::config::{Config, HomeMode};
 use crate::error::ReloError;
+use crate::paths;
 use crate::version::{parse_release, resolve, Release};
 use anyhow::{bail, Context, Result};
 use indexmap::IndexMap;
@@ -19,10 +20,11 @@ impl Layout {
         if config_path.exists() && !force {
             anyhow::bail!(
                 "{} already exists; use --force to overwrite it",
-                config_path.display()
+                paths::display(&config_path)
             );
         }
-        fs::create_dir_all(root).with_context(|| format!("failed to create {}", root.display()))?;
+        fs::create_dir_all(root)
+            .with_context(|| format!("failed to create {}", paths::display(root)))?;
         fs::create_dir_all(root.join("releases"))?;
         match mode {
             HomeMode::Shared => fs::create_dir_all(root.join("home"))?,
@@ -44,11 +46,11 @@ impl Layout {
     fn load_with_active_validation(root: PathBuf, validate_active: bool) -> Result<Self> {
         let config_path = root.join("relo.yaml");
         if !config_path.is_file() {
-            return Err(ReloError::NotRoot(root.display().to_string()).into());
+            return Err(ReloError::NotRoot(paths::display(&root).into_owned()).into());
         }
         let releases = root.join("releases");
         if !releases.is_dir() {
-            return Err(ReloError::MissingReleases(releases.display().to_string()).into());
+            return Err(ReloError::MissingReleases(paths::display(&releases).into_owned()).into());
         }
         let config = Config::read(&config_path)?;
         let layout = Self { root, config };
@@ -243,10 +245,10 @@ impl Layout {
     ) -> Result<Option<Cow<'static, str>>> {
         if let Some(name) = name.strip_prefix("relo.") {
             let value = match name {
-                "context" | "ctx" | "root" => self.root.display().to_string(),
-                "active" => self.active_path().display().to_string(),
-                "release" => self.release_path(release_id).display().to_string(),
-                "home" => self.home_for(release_id).display().to_string(),
+                "context" | "ctx" | "root" => paths::display(&self.root).into_owned(),
+                "active" => paths::display(&self.active_path()).into_owned(),
+                "release" => paths::display(&self.release_path(release_id)).into_owned(),
+                "home" => paths::display(&self.home_for(release_id)).into_owned(),
                 "version" => release_id.to_string(),
                 _ => bail!("unknown variable: relo.{name}"),
             };
@@ -282,7 +284,7 @@ fn normalize_expanded_env_value(value: &str) -> String {
         // may be extended with `/suffix`. Normalize only a single absolute
         // path, not PATH-style lists or arbitrary literals.
         if path.is_absolute() && !value.contains(';') {
-            return normalize_path(path).display().to_string();
+            return paths::display(&normalize_path(path)).into_owned();
         }
     }
     value.to_string()
@@ -291,7 +293,7 @@ fn normalize_expanded_env_value(value: &str) -> String {
 #[cfg(unix)]
 fn active_link_target(path: &Path, meta: &fs::Metadata) -> Result<PathBuf> {
     if !meta.file_type().is_symlink() {
-        return Err(ReloError::ActiveNotManagedLink(path.display().to_string()).into());
+        return Err(ReloError::ActiveNotManagedLink(paths::display(path).into_owned()).into());
     }
     Ok(fs::read_link(path)?)
 }
@@ -302,7 +304,7 @@ fn active_link_target(path: &Path, meta: &fs::Metadata) -> Result<PathBuf> {
         return Ok(fs::read_link(path)?);
     }
     junction::get_target(path)
-        .map_err(|_| ReloError::ActiveNotManagedLink(path.display().to_string()).into())
+        .map_err(|_| ReloError::ActiveNotManagedLink(paths::display(path).into_owned()).into())
 }
 
 #[cfg(unix)]
@@ -374,34 +376,27 @@ fn active_release_id(target: &Path, root: &Path) -> Result<String> {
             second
                 .to_str()
                 .map(|value| value.to_string())
-                .ok_or_else(|| ReloError::ActiveInvalidTarget(target.display().to_string()).into())
+                .ok_or_else(|| {
+                    ReloError::ActiveInvalidTarget(paths::display(target).into_owned()).into()
+                })
         }
-        _ => Err(ReloError::ActiveInvalidTarget(target.display().to_string()).into()),
+        _ => Err(ReloError::ActiveInvalidTarget(paths::display(target).into_owned()).into()),
     }
 }
 
 fn absolute_active_target<'a>(target: &'a Path, root: &Path) -> Result<Cow<'a, Path>> {
     #[cfg(windows)]
-    let root = strip_verbatim_prefix(root);
+    let root = paths::external(root);
     #[cfg(not(windows))]
     let root = Cow::Borrowed(root);
 
     #[cfg(windows)]
-    let target = strip_verbatim_prefix(target);
+    let target = paths::external(target);
     #[cfg(not(windows))]
     let target = Cow::Borrowed(target);
 
     target
         .strip_prefix(root.as_ref())
         .map(|path| Cow::Owned(path.to_path_buf()))
-        .map_err(|_| ReloError::ActiveInvalidTarget(target.display().to_string()).into())
-}
-
-#[cfg(windows)]
-fn strip_verbatim_prefix(path: &Path) -> Cow<'_, Path> {
-    let value = path.to_string_lossy();
-    match value.strip_prefix(r"\\?\") {
-        Some(value) => Cow::Owned(PathBuf::from(value)),
-        None => Cow::Borrowed(path),
-    }
+        .map_err(|_| ReloError::ActiveInvalidTarget(paths::display(&target).into_owned()).into())
 }

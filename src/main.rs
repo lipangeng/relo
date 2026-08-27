@@ -3,6 +3,7 @@ mod config;
 mod error;
 mod layout;
 mod macos;
+mod paths;
 mod shell;
 mod version;
 mod windows_env;
@@ -72,17 +73,20 @@ fn run() -> Result<()> {
                     let release = layout.resolve(&expr)?;
                     let active = layout.active_version()?.as_deref() == Some(release.id.as_str());
                     println!("version:  {}", release.id);
-                    println!("release:  {}", release.path.display());
-                    println!("home:     {}", layout.home_for(&release.id).display());
+                    println!("release:  {}", paths::display(&release.path));
+                    println!(
+                        "home:     {}",
+                        paths::display(&layout.home_for(&release.id))
+                    );
                     println!("active:   {}", if active { "yes" } else { "no" });
                 }
                 None => {
                     let active = layout.active_version()?;
-                    println!("context:  {}", layout.root.display());
+                    println!("context:  {}", paths::display(&layout.root));
                     println!("active:   {}", active.as_deref().unwrap_or("none"));
                     if let Some(active) = active.as_deref() {
-                        println!("release:  {}", layout.release_path(active).display());
-                        println!("home:     {}", layout.home_for(active).display());
+                        println!("release:  {}", paths::display(&layout.release_path(active)));
+                        println!("home:     {}", paths::display(&layout.home_for(active)));
                     } else {
                         println!("release:  none");
                         println!("home:     none");
@@ -167,11 +171,11 @@ fn run() -> Result<()> {
             match target {
                 PrintTarget::Context | PrintTarget::Ctx => {
                     reject_print_version(&target, &version)?;
-                    println!("{}", layout.root.display());
+                    println!("{}", paths::display(&layout.root));
                 }
                 PrintTarget::Active => {
                     reject_print_version(&target, &version)?;
-                    println!("{}", layout.active_path().display());
+                    println!("{}", paths::display(&layout.active_path()));
                 }
                 PrintTarget::Version => {
                     let release = print_release(&layout, version.as_deref())?;
@@ -179,16 +183,16 @@ fn run() -> Result<()> {
                 }
                 PrintTarget::Release => {
                     let release = print_release(&layout, version.as_deref())?;
-                    println!("{}", release.path.display());
+                    println!("{}", paths::display(&release.path));
                 }
                 PrintTarget::Home => {
                     let release = print_release(&layout, version.as_deref())?;
-                    println!("{}", layout.home_for(&release.id).display());
+                    println!("{}", paths::display(&layout.home_for(&release.id)));
                 }
                 PrintTarget::Path => {
                     let release = print_release(&layout, version.as_deref())?;
                     for path in layout.effective_path(&release.id, &[])? {
-                        println!("{}", path.display());
+                        println!("{}", paths::display(&path));
                     }
                 }
                 PrintTarget::Env => {
@@ -212,7 +216,7 @@ fn run() -> Result<()> {
                 let release = print_release(&layout, version.as_deref())?;
                 if verbose > 0 {
                     eprintln!("version: {}", release.id);
-                    eprintln!("release: {}", release.path.display());
+                    eprintln!("release: {}", paths::display(&release.path));
                     eprintln!("attribute: com.apple.quarantine");
                     eprintln!("recursive: yes");
                 }
@@ -260,7 +264,7 @@ fn print_use_verbose(
 ) -> Result<()> {
     let release = layout.resolve(release_id)?;
     eprintln!("version: {}", release.id);
-    eprintln!("release: {}", release.path.display());
+    eprintln!("release: {}", paths::display(&release.path));
     eprintln!("mode: {}", if global { "global" } else { "local" });
 
     eprintln!("env:");
@@ -283,7 +287,7 @@ fn print_use_verbose(
         eprintln!("  (none)");
     } else {
         for path in path {
-            eprintln!("  {}", path.display());
+            eprintln!("  {}", paths::display(&path));
         }
     }
 

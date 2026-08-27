@@ -1,6 +1,7 @@
 use super::model::*;
 use super::protocol::*;
 use crate::layout::Layout;
+use crate::paths;
 use anyhow::{bail, Context, Result};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
@@ -19,7 +20,7 @@ pub(super) fn desired_context(
         if normalized.starts_with("RELO_") {
             bail!("RELO_ is reserved for persistent environment management: {name}");
         }
-        let value = external_windows_path(&value);
+        let value = paths::external_windows(&value).into_owned();
         if let Some(previous) = env.insert(normalized.clone(), value) {
             bail!(
                 "Windows environment variable names are case-insensitive; duplicate variable {name} conflicts with value {previous:?}"
@@ -30,7 +31,7 @@ pub(super) fn desired_context(
     let path = layout
         .effective_path(release, &[])?
         .into_iter()
-        .map(|path| external_windows_path(&path.display().to_string()))
+        .map(|path| paths::display(&path).into_owned())
         .collect::<Vec<_>>()
         .join(";");
     validate_value_length(&path, "PATH")?;
