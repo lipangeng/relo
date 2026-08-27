@@ -68,7 +68,7 @@ fn persistent_environment_is_visible_in_a_fresh_user_environment_block() {
 }
 
 #[test]
-fn path_expansion_supports_one_and_two_levels_of_user_variables() {
+fn path_expansion_diagnostic_probe() {
     if std::env::var_os("RELO_WINDOWS_ENV_INTEGRATION").as_deref()
         != Some(std::ffi::OsStr::new("1"))
     {
@@ -82,7 +82,7 @@ fn path_expansion_supports_one_and_two_levels_of_user_variables() {
     let provider_reference = format!("%{provider_name}%");
     let concrete_path = format!(r"C:\RELO-PATH-EXPANSION-{nonce}\BIN");
 
-    let result = (|| -> Result<()> {
+    let result = (|| -> Result<String> {
         let mut one_level = before.clone();
         one_level.set(EnvValue::expandable(&provider_name, &concrete_path));
         one_level.set(EnvValue::expandable("Path", &provider_reference));
@@ -90,11 +90,8 @@ fn path_expansion_supports_one_and_two_levels_of_user_variables() {
             Scope::User,
             &Plan::between(before.clone(), one_level.clone(), false, Vec::new()),
         )?;
-        require_path_entry(
-            &fresh_user_environment()?,
-            &concrete_path,
-            "one-level Path -> context provider expansion",
-        )?;
+        let one_level_registry = read(Scope::User)?;
+        let one_level_environment = fresh_user_environment()?;
 
         let mut two_levels = one_level.clone();
         two_levels.set(EnvValue::expandable(PATH_APPEND, &provider_reference));
@@ -103,12 +100,53 @@ fn path_expansion_supports_one_and_two_levels_of_user_variables() {
             Scope::User,
             &Plan::between(one_level, two_levels, false, Vec::new()),
         )?;
-        require_path_entry(
-            &fresh_user_environment()?,
-            &concrete_path,
-            "two-level Path -> aggregate -> context provider expansion",
-        )?;
-        Ok(())
+        let two_level_registry = read(Scope::User)?;
+        let two_level_environment = fresh_user_environment()?;
+
+        Ok(format!(
+            concat!(
+                "provider name: {provider_name}\n",
+                "provider reference: {provider_reference}\n",
+                "aggregate name: {aggregate_name}\n",
+                "aggregate reference: {aggregate_reference}\n",
+                "concrete path: {concrete_path}\n",
+                "\n[one level: Path -> provider]\n",
+                "registry provider: {one_registry_provider}\n",
+                "registry Path: {one_registry_path}\n",
+                "fresh provider: {one_fresh_provider}\n",
+                "fresh Path: {one_fresh_path}\n",
+                "fresh Path contains provider reference: {one_has_provider_reference}\n",
+                "fresh Path contains concrete path: {one_has_concrete_path}\n",
+                "\n[two levels: Path -> aggregate -> provider]\n",
+                "registry provider: {two_registry_provider}\n",
+                "registry aggregate: {two_registry_aggregate}\n",
+                "registry Path: {two_registry_path}\n",
+                "fresh provider: {two_fresh_provider}\n",
+                "fresh aggregate: {two_fresh_aggregate}\n",
+                "fresh Path: {two_fresh_path}\n",
+                "fresh Path contains aggregate reference: {two_has_aggregate_reference}\n",
+                "fresh Path contains provider reference: {two_has_provider_reference}\n",
+                "fresh Path contains concrete path: {two_has_concrete_path}"
+            ),
+            aggregate_name = PATH_APPEND,
+            aggregate_reference = format!("%{PATH_APPEND}%"),
+            one_registry_provider = registry_value(&one_level_registry, &provider_name),
+            one_registry_path = registry_value(&one_level_registry, "Path"),
+            one_fresh_provider = environment_value(&one_level_environment, &provider_name),
+            one_fresh_path = environment_value(&one_level_environment, "Path"),
+            one_has_provider_reference = path_contains(&one_level_environment, &provider_reference),
+            one_has_concrete_path = path_contains(&one_level_environment, &concrete_path),
+            two_registry_provider = registry_value(&two_level_registry, &provider_name),
+            two_registry_aggregate = registry_value(&two_level_registry, PATH_APPEND),
+            two_registry_path = registry_value(&two_level_registry, "Path"),
+            two_fresh_provider = environment_value(&two_level_environment, &provider_name),
+            two_fresh_aggregate = environment_value(&two_level_environment, PATH_APPEND),
+            two_fresh_path = environment_value(&two_level_environment, "Path"),
+            two_has_aggregate_reference =
+                path_contains(&two_level_environment, &format!("%{PATH_APPEND}%")),
+            two_has_provider_reference = path_contains(&two_level_environment, &provider_reference),
+            two_has_concrete_path = path_contains(&two_level_environment, &concrete_path),
+        ))
     })();
 
     let cleanup = read(Scope::User).and_then(|current| {
@@ -118,23 +156,31 @@ fn path_expansion_supports_one_and_two_levels_of_user_variables() {
     if let Err(error) = cleanup {
         panic!("failed to restore Windows PATH expansion test environment: {error:#}");
     }
-    result.unwrap();
+    match result {
+        Ok(report) => panic!("PATH expansion diagnostic completed:\n{report}"),
+        Err(error) => panic!("PATH expansion diagnostic failed before completion: {error:#}"),
+    }
 }
 
-fn require_path_entry(
-    environment: &BTreeMap<String, String>,
-    expected: &str,
-    scenario: &str,
-) -> Result<()> {
-    let effective_path = environment.get("PATH").cloned().unwrap_or_default();
-    if effective_path
-        .split(';')
-        .any(|entry| entry.eq_ignore_ascii_case(expected))
-    {
-        Ok(())
-    } else {
-        bail!("{scenario} failed; effective Path was {effective_path:?}")
-    }
+fn path_contains(environment: &BTreeMap<String, String>, expected: &str) -> bool {
+    environment.get("PATH").is_some_and(|effective_path| {
+        effective_path
+            .split(';')
+            .any(|entry| entry.eq_ignore_ascii_case(expected))
+    })
+}
+
+fn registry_value(snapshot: &Snapshot, name: &str) -> String {
+    snapshot.get(name).map_or_else(
+        || "<missing>".to_owned(),
+        |value| format!("kind={:?}, value={:?}", value.kind, value.value),
+    )
+}
+
+fn environment_value(environment: &BTreeMap<String, String>, name: &str) -> String {
+    environment
+        .get(&name.to_ascii_uppercase())
+        .map_or_else(|| "<missing>".to_owned(), |value| format!("{value:?}"))
 }
 
 fn fresh_user_environment() -> Result<BTreeMap<String, String>> {
