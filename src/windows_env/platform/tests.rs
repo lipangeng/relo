@@ -128,8 +128,11 @@ fn path_expansion_diagnostic_probe() {
                 "fresh Path contains provider reference: {two_has_provider_reference}\n",
                 "fresh Path contains concrete path: {two_has_concrete_path}"
             ),
+            provider_name = provider_name,
+            provider_reference = provider_reference,
             aggregate_name = PATH_APPEND,
             aggregate_reference = format!("%{PATH_APPEND}%"),
+            concrete_path = concrete_path,
             one_registry_provider = registry_value(&one_level_registry, &provider_name),
             one_registry_path = registry_value(&one_level_registry, "Path"),
             one_fresh_provider = environment_value(&one_level_environment, &provider_name),
