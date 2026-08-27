@@ -238,6 +238,19 @@ fn win_env_help_exposes_persistent_environment_commands() {
     }
 }
 
+#[cfg(windows)]
+#[test]
+fn win_env_apply_dry_run_does_not_emit_verbatim_paths() {
+    let root = temp_root("win-env-no-verbatim-path");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+
+    let out = assert_success(run(&root, &["win", "env", "apply", "1.0.0", "--dry-run"]));
+
+    assert!(out.contains(r"\active\bin"));
+    assert!(!out.contains(r"\\?\"), "{out}");
+}
+
 #[test]
 fn init_refuses_to_overwrite_existing_config_by_default() {
     let root = temp_root("init-existing");

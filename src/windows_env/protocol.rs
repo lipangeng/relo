@@ -20,12 +20,35 @@ pub(super) fn normalize_context_path(path: &Path) -> Result<String> {
             _ => normalized.push(component.as_os_str()),
         }
     }
-    let value = normalized.display().to_string().replace('/', "\\");
+    let value = external_windows_path(&normalized.display().to_string().replace('/', "\\"));
     if normalized.parent().is_none() {
         Ok(value)
     } else {
         Ok(value.trim_end_matches('\\').to_owned())
     }
+}
+
+pub(super) fn external_windows_path(value: &str) -> String {
+    const VERBATIM_PREFIX: &str = r"\\?\";
+    const VERBATIM_UNC_PREFIX: &str = r"\\?\UNC\";
+
+    if value
+        .get(..VERBATIM_UNC_PREFIX.len())
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(VERBATIM_UNC_PREFIX))
+    {
+        return format!(r"\\{}", &value[VERBATIM_UNC_PREFIX.len()..]);
+    }
+    if let Some(path) = value.strip_prefix(VERBATIM_PREFIX) {
+        let bytes = path.as_bytes();
+        if bytes.len() >= 3
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && bytes[2] == b'\\'
+        {
+            return path.to_owned();
+        }
+    }
+    value.to_owned()
 }
 
 pub(super) fn context_id(path: &Path) -> Result<String> {

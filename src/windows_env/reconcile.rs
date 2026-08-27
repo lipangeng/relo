@@ -19,6 +19,7 @@ pub(super) fn desired_context(
         if normalized.starts_with("RELO_") {
             bail!("RELO_ is reserved for persistent environment management: {name}");
         }
+        let value = external_windows_path(&value);
         if let Some(previous) = env.insert(normalized.clone(), value) {
             bail!(
                 "Windows environment variable names are case-insensitive; duplicate variable {name} conflicts with value {previous:?}"
@@ -29,7 +30,7 @@ pub(super) fn desired_context(
     let path = layout
         .effective_path(release, &[])?
         .into_iter()
-        .map(|path| path.display().to_string())
+        .map(|path| external_windows_path(&path.display().to_string()))
         .collect::<Vec<_>>()
         .join(";");
     validate_value_length(&path, "PATH")?;
