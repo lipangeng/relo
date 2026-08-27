@@ -80,6 +80,7 @@ fn path_expansion_diagnostic_probe() {
     let nonce = std::process::id();
     let provider_name = format!("RELO_PATH_EXPANSION_TEST_{nonce}");
     let provider_reference = format!("%{provider_name}%");
+    let aggregate_reference = format!("%{PATH_APPEND}%");
     let concrete_path = format!(r"C:\RELO-PATH-EXPANSION-{nonce}\BIN");
 
     let result = (|| -> Result<String> {
@@ -95,7 +96,7 @@ fn path_expansion_diagnostic_probe() {
 
         let mut two_levels = one_level.clone();
         two_levels.set(EnvValue::expandable(PATH_APPEND, &provider_reference));
-        two_levels.set(EnvValue::expandable("Path", format!("%{PATH_APPEND}%")));
+        two_levels.set(EnvValue::expandable("Path", &aggregate_reference));
         apply(
             Scope::User,
             &Plan::between(one_level, two_levels, false, Vec::new()),
@@ -131,7 +132,7 @@ fn path_expansion_diagnostic_probe() {
             provider_name = provider_name,
             provider_reference = provider_reference,
             aggregate_name = PATH_APPEND,
-            aggregate_reference = format!("%{PATH_APPEND}%"),
+            aggregate_reference = aggregate_reference,
             concrete_path = concrete_path,
             one_registry_provider = registry_value(&one_level_registry, &provider_name),
             one_registry_path = registry_value(&one_level_registry, "Path"),
@@ -146,7 +147,7 @@ fn path_expansion_diagnostic_probe() {
             two_fresh_aggregate = environment_value(&two_level_environment, PATH_APPEND),
             two_fresh_path = environment_value(&two_level_environment, "Path"),
             two_has_aggregate_reference =
-                path_contains(&two_level_environment, &format!("%{PATH_APPEND}%")),
+                path_contains(&two_level_environment, &aggregate_reference),
             two_has_provider_reference = path_contains(&two_level_environment, &provider_reference),
             two_has_concrete_path = path_contains(&two_level_environment, &concrete_path),
         ))
