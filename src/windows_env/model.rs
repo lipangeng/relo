@@ -1,3 +1,4 @@
+#[cfg(any(test, windows, feature = "check-windows"))]
 use anyhow::{bail, Result};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
