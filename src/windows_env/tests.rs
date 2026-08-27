@@ -258,6 +258,22 @@ fn path_drift_blocks_reconciliation() {
 }
 
 #[test]
+fn existing_append_anchor_keeps_its_position_when_external_entries_follow_it() {
+    let first = plan_apply(Snapshot::default(), &desired(A), true).unwrap();
+    let mut snapshot = first.after;
+    snapshot.set(EnvValue::expandable(
+        "Path",
+        r"%RELO_PATH_APPEND%;C:\external\bin",
+    ));
+
+    let second = plan_apply(snapshot, &desired(A), true).unwrap();
+    assert_eq!(
+        second.after.get("Path").unwrap().value,
+        r"%RELO_PATH_APPEND%;C:\external\bin"
+    );
+}
+
+#[test]
 fn unknown_reserved_state_is_rejected() {
     let snapshot = Snapshot::from_values([EnvValue::string("RELO_UNKNOWN", "value")]).unwrap();
     let err = plan_apply(snapshot, &desired(A), false).unwrap_err();

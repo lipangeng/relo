@@ -252,7 +252,7 @@ fn write_aggregates_and_path(
 ) -> Result<()> {
     let old_prepend = configured_path_ids(before, CONF_PATH_PREPEND, PATH_PREPEND)?;
     let old_append = configured_path_ids(before, CONF_PATH_APPEND, PATH_APPEND)?;
-    let base_path = unmanaged_path_segments(before, &old_prepend, &old_append)?;
+    let mut path_segments = reconciled_path_segments(before, &old_prepend, &old_append)?;
     if prepend.is_empty() {
         snapshot.remove(CONF_PATH_PREPEND);
         snapshot.remove(PATH_PREPEND);
@@ -276,15 +276,9 @@ fn write_aggregates_and_path(
         snapshot.set(EnvValue::string(PATH_APPEND, aggregate_value));
     }
 
-    let mut segments = Vec::new();
-    if !prepend.is_empty() {
-        segments.push(reference(PATH_PREPEND));
-    }
-    segments.extend(base_path);
-    if !append.is_empty() {
-        segments.push(reference(PATH_APPEND));
-    }
-    let value = segments.join(";");
+    reconcile_anchor(&mut path_segments, PATH_PREPEND, !prepend.is_empty(), true)?;
+    reconcile_anchor(&mut path_segments, PATH_APPEND, !append.is_empty(), false)?;
+    let value = path_segments.join(";");
     validate_value_length(&value, "Path")?;
     if value.is_empty() {
         snapshot.remove("PATH");
@@ -314,7 +308,7 @@ fn managed_path_segments(snapshot: &Snapshot, references: &[String]) -> Result<V
         .collect())
 }
 
-fn unmanaged_path_segments(
+fn reconciled_path_segments(
     snapshot: &Snapshot,
     prepend: &[String],
     append: &[String],
@@ -326,23 +320,55 @@ fn unmanaged_path_segments(
 
     let prepend_anchor = reference(PATH_PREPEND);
     let append_anchor = reference(PATH_APPEND);
-    if segments
-        .first()
-        .is_some_and(|value| value.eq_ignore_ascii_case(&prepend_anchor))
-    {
-        segments.remove(0);
-    } else {
+    validate_single_anchor(&segments, &prepend_anchor)?;
+    validate_single_anchor(&segments, &append_anchor)?;
+    if !contains_anchor(&segments, &prepend_anchor) {
         remove_managed_prefix(&mut segments, &managed_path_segments(snapshot, prepend)?)?;
     }
-    if segments
-        .last()
-        .is_some_and(|value| value.eq_ignore_ascii_case(&append_anchor))
-    {
-        segments.pop();
-    } else {
+    if !contains_anchor(&segments, &append_anchor) {
         remove_managed_suffix(&mut segments, &managed_path_segments(snapshot, append)?)?;
     }
     Ok(segments)
+}
+
+fn validate_single_anchor(segments: &[String], anchor: &str) -> Result<()> {
+    if segments
+        .iter()
+        .filter(|segment| segment.eq_ignore_ascii_case(anchor))
+        .count()
+        > 1
+    {
+        bail!("Path contains duplicate relo-managed anchor {anchor}");
+    }
+    Ok(())
+}
+
+fn contains_anchor(segments: &[String], anchor: &str) -> bool {
+    segments
+        .iter()
+        .any(|segment| segment.eq_ignore_ascii_case(anchor))
+}
+
+fn reconcile_anchor(
+    segments: &mut Vec<String>,
+    name: &str,
+    required: bool,
+    prepend_when_missing: bool,
+) -> Result<()> {
+    let anchor = reference(name);
+    validate_single_anchor(segments, &anchor)?;
+    let position = segments
+        .iter()
+        .position(|segment| segment.eq_ignore_ascii_case(&anchor));
+    match (required, position) {
+        (true, None) if prepend_when_missing => segments.insert(0, anchor),
+        (true, None) => segments.push(anchor),
+        (false, Some(position)) => {
+            segments.remove(position);
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn remove_managed_prefix(segments: &mut Vec<String>, managed: &[String]) -> Result<()> {
