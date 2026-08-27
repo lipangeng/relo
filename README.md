@@ -8,7 +8,7 @@ It targets a deliberately manual software-management workflow: you already prefe
 
 Package managers and SDK managers can provide fuller install, upgrade, and switching workflows, but they also bring their own default directories, implicit configuration, and state that is not always easy to inspect directly. `relo` is not a replacement for those tools; it is a lightweight, limited-scope helper for users who prefer transparent directory layouts, manual control over installed contents, and a cleaner environment model.
 
-It manages user-provided software release directories. It does not download, install, upgrade, remove, scan contexts, or maintain a registry.
+It manages user-provided software release directories. It does not download, install, upgrade, remove, or scan software. Windows environment registration happens only through the explicit `relo win env` commands.
 
 It is suitable for tools such as JDK, Maven, Gradle, Node, Go, protoc, internal CLIs, and versioned binary distributions.
 
@@ -64,6 +64,10 @@ relo [-d <dir>] use -g [version]
 relo [-d <dir>] print <context|ctx|active|release|home|version|path|env> [--version <version>]
 relo [-d <dir>] config [show]
 relo [-d <dir>] mac unblock [-v] [version]
+relo [-d <dir>] win env apply [version] [--scope user|system] [--path-append] [--yes] [--dry-run]
+relo [-d <dir>] win env status [--scope user|system] [--all] [--json]
+relo [-d <dir>] win env remove [--scope user|system] [--id <context-id>] [--yes] [--dry-run]
+relo [-d <dir>] win env prune [--scope user|system] [--yes] [--dry-run]
 relo init zsh
 relo init bash
 relo init powershell
@@ -85,6 +89,49 @@ Pass `-v` or `--verbose` to print the selected version, release path, quarantine
 ```bash
 relo mac unblock -v 3.9.9
 ```
+
+### Persistent Windows environment
+
+Local `relo use` behavior is unchanged. On Windows, use the separate `win env`
+command group when configured environment variables and paths must persist for
+future processes:
+
+```powershell
+relo use -g 3.9.9
+relo win env apply
+relo win env status
+```
+
+`apply` uses the active release when no version is given. An explicit version
+does not change `active`. User scope is the default; system scope requires an
+administrator terminal:
+
+```powershell
+relo win env apply 3.9.9 --scope system --yes
+```
+
+Multiple contexts can contribute paths. New contexts are prepended by default;
+`--path-append` places a context after the existing Windows `Path`. Reapplying a
+context preserves its current path position unless `--path-append` is passed.
+For normal environment variables, the last context applied becomes the active
+provider.
+
+The ownership protocol is visible through reserved `RELO_*` environment
+variables. `Path` contains stable `%RELO_PATH_PREPEND%` and
+`%RELO_PATH_APPEND%` anchors, while each context owns a path variable identified
+by a case-insensitive path hash. `RELO_` is therefore reserved and cannot be used
+as a configured env prefix.
+
+Before taking over an existing non-relo variable, `apply` shows the old and new
+values and asks for confirmation. Relo deliberately does not save the original
+value. Removing the winning or last provider deletes the public variable; it
+does not restore an older value or automatically select a dormant provider.
+Use `--dry-run` to inspect changes and `--yes` for non-interactive execution.
+
+`remove` removes the current context, or a specific registered ID with `--id`.
+`prune` removes contexts whose recorded directories no longer exist. Changes
+affect newly launched processes only; reopen the terminal after applying them.
+The `user` and `system` scopes are independent.
 
 `-d` selects the context directory. If `-d` is omitted, `relo` uses
 `RELO_CONTEXT` when it is set, then `RELO_CTX`, otherwise it uses the current

@@ -202,6 +202,24 @@ fn mac_unblock_reports_unsupported_platform() {
     assert!(err.contains("mac unblock is only supported on macOS"));
 }
 
+#[cfg(not(windows))]
+#[test]
+fn win_env_reports_unsupported_platform_before_loading_context() {
+    let root = temp_root("win-env-platform");
+    let err = assert_failure(run(&root, &["win", "env", "status"]));
+    assert!(err.contains("win env is only supported on Windows"));
+    assert!(!err.contains("not a relo context"));
+}
+
+#[test]
+fn win_env_help_exposes_persistent_environment_commands() {
+    let root = temp_root("win-env-help");
+    let out = assert_success(run(&root, &["win", "env", "--help"]));
+    for command in ["apply", "status", "remove", "prune"] {
+        assert!(out.contains(command));
+    }
+}
+
 #[test]
 fn init_refuses_to_overwrite_existing_config_by_default() {
     let root = temp_root("init-existing");

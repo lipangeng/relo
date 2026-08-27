@@ -8,7 +8,7 @@ English: [README.md](README.md)
 
 很多包管理器和 SDK 管理工具都能完成更完整的安装、升级和切换流程，但它们通常也会带来各自的默认目录、隐式配置和不容易直接观察的状态。`relo` 不是这些工具的替代品；它只是给偏好透明目录结构、手动掌控安装内容、对环境有一点“洁癖”的用户提供一个轻量化、有限范围的辅助工具。
 
-它只管理用户已经放到本地目录里的软件版本布局。它不会下载、安装、升级、删除软件，不会扫描 context，也不会维护 registry。
+它只管理用户已经放到本地目录里的软件版本布局。它不会下载、安装、升级、删除软件，也不会扫描 context。只有显式执行 `relo win env` 时才会登记 Windows 持久环境变量。
 
 适合用来管理这类工具：JDK、Maven、Gradle、Node、Go、protoc、内部 CLI、按版本分发的二进制工具包。
 
@@ -117,6 +117,10 @@ relo [-d <dir>] use -g [version]
 relo [-d <dir>] print <context|ctx|active|release|home|version|path|env> [--version <version>]
 relo [-d <dir>] config [show]
 relo [-d <dir>] mac unblock [-v] [version]
+relo [-d <dir>] win env apply [version] [--scope user|system] [--path-append] [--yes] [--dry-run]
+relo [-d <dir>] win env status [--scope user|system] [--all] [--json]
+relo [-d <dir>] win env remove [--scope user|system] [--id <context-id>] [--yes] [--dry-run]
+relo [-d <dir>] win env prune [--scope user|system] [--yes] [--dry-run]
 relo init zsh
 relo init bash
 relo init powershell
@@ -148,6 +152,42 @@ relo mac unblock 3.9.9
 ```bash
 relo mac unblock -v 3.9.9
 ```
+
+### Windows 持久环境变量
+
+现有 local `relo use` 行为保持不变。Windows 下需要让配置的环境变量和
+PATH 对后续进程持久生效时，显式使用独立的 `win env` 命令组：
+
+```powershell
+relo use -g 3.9.9
+relo win env apply
+relo win env status
+```
+
+`apply` 省略版本时使用 active release；显式传入版本不会修改 `active`。
+默认写入当前用户作用域，system 作用域需要管理员终端：
+
+```powershell
+relo win env apply 3.9.9 --scope system --yes
+```
+
+多个 context 可以共同贡献 PATH。新 context 默认加入 Windows `Path` 前部；
+`--path-append` 将它放在后部。重复 apply 时保持现有 PATH 位置，除非显式传入
+`--path-append`。普通环境变量采用“最后 apply 的 context 生效”语义。
+
+所有权协议通过保留的 `RELO_*` 环境变量公开表达。`Path` 只包含稳定的
+`%RELO_PATH_PREPEND%` 和 `%RELO_PATH_APPEND%` 锚点，每个 context 使用由
+大小写不敏感路径哈希生成的 ID 管理自己的 PATH 变量。因此 `RELO_` 是保留前缀，
+不能用于 `relo.yaml` 的持久 env 配置。
+
+首次接管非 relo 环境变量前，`apply` 会展示旧值和新值并要求确认。relo 不保存
+被覆盖的原值；当前 winner 或最后一个 provider 被移除时，公共变量会被删除，
+不会恢复旧值，也不会自动选择 dormant provider。使用 `--dry-run` 预览，自动化
+执行时使用 `--yes`。
+
+`remove` 默认移除当前 context，也可用 `--id` 精确移除已登记 ID。`prune` 清理
+记录路径已经不存在的 context。修改只对之后启动的进程生效，apply 后需要重新打开
+终端。user 与 system 两个作用域彼此独立。
 
 ## 常见工作流
 
@@ -399,7 +439,6 @@ Release 专属的 `path` 条目排在全局 path 条目之前。`path` 在 env �
 - upgrade
 - remove
 - scan
-- registry
 - plugin
 - shim
 - project local version

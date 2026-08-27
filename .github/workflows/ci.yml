@@ -42,3 +42,5 @@ jobs:
 
       - name: Run tests
         run: cargo test --locked
+        env:
+          RELO_WINDOWS_ENV_INTEGRATION: ${{ runner.os == 'Windows' && '1' || '0' }}

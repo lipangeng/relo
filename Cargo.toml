@@ -12,3 +12,16 @@ anyhow = "1"
 thiserror = "2"
 indexmap = { version = "2", features = ["serde"] }
 shellexpand = "3"
+sha2 = "0.10"
+serde_json = "1"
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_Registry",
+  "Win32_System_Environment",
+  "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[features]
+check-windows = []

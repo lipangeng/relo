@@ -5,10 +5,13 @@ mod layout;
 mod macos;
 mod shell;
 mod version;
+mod windows_env;
 
 use anyhow::Result;
 use clap::{CommandFactory, Parser};
-use cli::{Cli, Command, ConfigCommand, HomeArg, InitTarget, MacCommand, PrintTarget, ShellArg};
+use cli::{
+    Cli, Command, ConfigCommand, HomeArg, InitTarget, MacCommand, PrintTarget, ShellArg, WinCommand,
+};
 use layout::Layout;
 use shell::ShellKind;
 use std::path::PathBuf;
@@ -22,6 +25,7 @@ fn main() {
 
 fn run() -> Result<()> {
     let cli = Cli::parse();
+    let logical_root = selected_context_dir(&cli);
     let root = context_dir(&cli);
 
     match cli.command {
@@ -218,6 +222,12 @@ fn run() -> Result<()> {
                 println!("unblocked: {}", release.id);
             }
         },
+        Command::Win { command } => {
+            windows_env::ensure_supported()?;
+            match command {
+                WinCommand::Env { command } => windows_env::run(&logical_root, &root, command)?,
+            }
+        }
     }
 
     Ok(())
@@ -298,8 +308,12 @@ fn use_forward_args(global: bool, verbose: u8, version: Option<&str>) -> Vec<Str
 }
 
 fn context_dir(cli: &Cli) -> PathBuf {
-    let dir = cli
-        .dir
+    let dir = selected_context_dir(cli);
+    std::fs::canonicalize(&dir).unwrap_or(dir)
+}
+
+fn selected_context_dir(cli: &Cli) -> PathBuf {
+    cli.dir
         .clone()
         .or_else(|| {
             std::env::var_os("RELO_CONTEXT")
@@ -311,8 +325,7 @@ fn context_dir(cli: &Cli) -> PathBuf {
                 .filter(|value| !value.is_empty())
                 .map(PathBuf::from)
         })
-        .unwrap_or_else(|| PathBuf::from("."));
-    std::fs::canonicalize(&dir).unwrap_or(dir)
+        .unwrap_or_else(|| PathBuf::from("."))
 }
 
 impl From<ShellArg> for ShellKind {

@@ -60,6 +60,11 @@ pub enum Command {
         #[command(subcommand)]
         command: MacCommand,
     },
+    /// Windows-specific environment integration
+    Win {
+        #[command(subcommand)]
+        command: WinCommand,
+    },
 }
 
 #[derive(Clone, ValueEnum)]
@@ -121,6 +126,66 @@ pub enum MacCommand {
         verbose: u8,
         version: Option<String>,
     },
+}
+
+#[derive(Clone, Subcommand)]
+pub enum WinCommand {
+    /// Manage persistent Windows environment variables
+    Env {
+        #[command(subcommand)]
+        command: WinEnvCommand,
+    },
+}
+
+#[derive(Clone, Subcommand)]
+pub enum WinEnvCommand {
+    /// Apply this context to the persistent Windows environment
+    Apply {
+        version: Option<String>,
+        #[arg(long, value_enum, default_value = "user")]
+        scope: EnvScopeArg,
+        #[arg(long)]
+        path_append: bool,
+        #[arg(long)]
+        yes: bool,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Inspect persistent Windows environment state
+    Status {
+        #[arg(long, value_enum, default_value = "user")]
+        scope: EnvScopeArg,
+        #[arg(long)]
+        all: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remove one context from the persistent Windows environment
+    Remove {
+        #[arg(long, value_enum, default_value = "user")]
+        scope: EnvScopeArg,
+        #[arg(long)]
+        id: Option<String>,
+        #[arg(long)]
+        yes: bool,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Remove registered contexts whose directories no longer exist
+    Prune {
+        #[arg(long, value_enum, default_value = "user")]
+        scope: EnvScopeArg,
+        #[arg(long)]
+        yes: bool,
+        #[arg(long)]
+        dry_run: bool,
+    },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum EnvScopeArg {
+    User,
+    System,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
