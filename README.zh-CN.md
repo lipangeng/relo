@@ -175,10 +175,12 @@ relo win env apply 3.9.9 --scope system --yes
 `--path-append` 将它放在后部。重复 apply 时保持现有 PATH 位置，除非显式传入
 `--path-append`。普通环境变量采用“最后 apply 的 context 生效”语义。
 
-所有权协议通过保留的 `RELO_*` 环境变量公开表达。`Path` 只包含稳定的
-`%RELO_PATH_PREPEND%` 和 `%RELO_PATH_APPEND%` 锚点，每个 context 使用由
-大小写不敏感路径哈希生成的 ID 管理自己的 PATH 变量。因此 `RELO_` 是保留前缀，
-不能用于 `relo.yaml` 的持久 env 配置。
+所有权协议通过保留的 `RELO_*` 环境变量公开表达。每个 context 使用由大小写
+不敏感路径哈希生成的 ID 管理自己的 PATH 和环境变量 provider；
+`RELO_PATH_PREPEND` 与 `RELO_PATH_APPEND` 记录 PATH 顺序，`Path` 中写入同步后的
+具体路径；`RELO_OWNER_<NAME>` 记录公共环境变量当前由哪个 context 管理。这样不再
+依赖 Windows 对同一作用域内变量的递归展开。因此 `RELO_` 是保留前缀，不能用于
+`relo.yaml` 的持久 env 配置。
 
 首次接管非 relo 环境变量前，`apply` 会展示旧值和新值并要求确认。relo 不保存
 被覆盖的原值；当前 winner 或最后一个 provider 被移除时，公共变量会被删除，

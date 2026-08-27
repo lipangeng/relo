@@ -6,6 +6,7 @@ pub(super) const CONTEXT_PREFIX: &str = "RELO_CONTEXT_";
 pub(super) const RELEASE_PREFIX: &str = "RELO_RELEASE_";
 pub(super) const PATH_PREFIX: &str = "RELO_PATH_";
 pub(super) const ENV_PREFIX: &str = "RELO_ENV_";
+pub(super) const OWNER_PREFIX: &str = "RELO_OWNER_";
 pub(super) const PATH_PREPEND: &str = "RELO_PATH_PREPEND";
 pub(super) const PATH_APPEND: &str = "RELO_PATH_APPEND";
 pub(super) const CONTEXT_ID_LEN: usize = 26;

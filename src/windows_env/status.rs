@@ -18,12 +18,7 @@ pub(super) fn build_status(
     }
     validate_aggregate_status(snapshot, PATH_PREPEND, &prepend, &mut issues);
     validate_aggregate_status(snapshot, PATH_APPEND, &append, &mut issues);
-    validate_path_anchors(
-        snapshot,
-        !prepend.is_empty(),
-        !append.is_empty(),
-        &mut issues,
-    );
+    validate_path_layout(snapshot, &prepend, &append, &mut issues);
 
     let mut contexts = discover_contexts(snapshot)
         .into_iter()
@@ -52,9 +47,8 @@ pub(super) fn build_status(
                     Some(EnvProviderStatus {
                         name: name.to_owned(),
                         value: value.value.clone(),
-                        active: snapshot.get(name).is_some_and(|public| {
-                            public.value.eq_ignore_ascii_case(&reference(provider))
-                        }),
+                        active: owner_id(snapshot, name) == Some(id.as_str())
+                            && provider_matches_public(snapshot, &id, name),
                     })
                 })
                 .collect::<Vec<_>>();
@@ -133,17 +127,17 @@ pub(super) fn build_status(
             }
         }
     }
-    let managed_names = snapshot
+    for owner in snapshot
         .names()
-        .filter_map(provider_public_name)
-        .collect::<BTreeSet<_>>();
-    for name in managed_names {
-        if let Some(public) = snapshot.get(&name) {
-            if !is_relo_provider_reference(&public.value) {
-                issues.push(format!(
-                    "{name} has relo providers but its public value is externally managed"
-                ));
-            }
+        .filter_map(|name| name.strip_prefix(OWNER_PREFIX))
+    {
+        let Some(id) = owner_id(snapshot, owner) else {
+            continue;
+        };
+        if !provider_matches_public(snapshot, id, owner) {
+            issues.push(format!(
+                "{owner} has a relo owner marker but its public value was modified"
+            ));
         }
     }
     StatusReport {
@@ -157,11 +151,9 @@ pub(super) fn build_status(
 
 pub(super) fn scope_shadow_warnings(system: &Snapshot, user: &Snapshot) -> Vec<String> {
     system
-        .values
-        .values()
-        .filter(|value| {
-            !value.name.starts_with("RELO_") && is_relo_provider_reference(&value.value)
-        })
+        .names()
+        .filter_map(|name| name.strip_prefix(OWNER_PREFIX))
+        .filter_map(|name| system.get(name))
         .filter_map(|system_value| {
             user.get(&system_value.name)
                 .filter(|user_value| user_value != &system_value)
@@ -198,48 +190,55 @@ fn matches_desired(snapshot: &Snapshot, desired: &DesiredContext) -> bool {
     actual == desired.env
 }
 
-fn validate_path_anchors(
+fn validate_path_layout(
     snapshot: &Snapshot,
-    has_prepend: bool,
-    has_append: bool,
+    prepend_references: &[String],
+    append_references: &[String],
     issues: &mut Vec<String>,
 ) {
     let segments = snapshot
         .get("PATH")
         .map(|value| value.value.split(';').collect::<Vec<_>>())
         .unwrap_or_default();
-    let prepend = reference(PATH_PREPEND);
-    let append = reference(PATH_APPEND);
-    let prepend_count = segments
-        .iter()
-        .filter(|segment| segment.eq_ignore_ascii_case(&prepend))
-        .count();
-    let append_count = segments
-        .iter()
-        .filter(|segment| segment.eq_ignore_ascii_case(&append))
-        .count();
-    if has_prepend
-        && (prepend_count != 1
-            || !segments
-                .first()
-                .is_some_and(|segment| segment.eq_ignore_ascii_case(&prepend)))
+    let prepend = path_segments_for_references(snapshot, prepend_references, issues);
+    let append = path_segments_for_references(snapshot, append_references, issues);
+    if segments.len() < prepend.len() + append.len()
+        || !segments
+            .iter()
+            .zip(&prepend)
+            .all(|(actual, expected)| windows_path_eq(actual, expected))
+        || !segments[segments.len().saturating_sub(append.len())..]
+            .iter()
+            .zip(&append)
+            .all(|(actual, expected)| windows_path_eq(actual, expected))
     {
-        issues.push("Path prepend anchor is missing, duplicated, or misplaced".to_owned());
+        issues.push(
+            "Path no longer contains relo-managed entries at their recorded positions".to_owned(),
+        );
     }
-    if !has_prepend && prepend_count != 0 {
-        issues.push("Path contains an orphaned prepend anchor".to_owned());
+}
+
+fn path_segments_for_references(
+    snapshot: &Snapshot,
+    references: &[String],
+    issues: &mut Vec<String>,
+) -> Vec<String> {
+    let mut segments = Vec::new();
+    for token in references {
+        let provider = token.trim_matches('%');
+        let Some(value) = snapshot.get(provider) else {
+            issues.push(format!("missing managed PATH provider {provider}"));
+            continue;
+        };
+        segments.extend(
+            value
+                .value
+                .split(';')
+                .filter(|segment| !segment.is_empty())
+                .map(str::to_owned),
+        );
     }
-    if has_append
-        && (append_count != 1
-            || !segments
-                .last()
-                .is_some_and(|segment| segment.eq_ignore_ascii_case(&append)))
-    {
-        issues.push("Path append anchor is missing, duplicated, or misplaced".to_owned());
-    }
-    if !has_append && append_count != 0 {
-        issues.push("Path contains an orphaned append anchor".to_owned());
-    }
+    segments
 }
 
 fn validate_aggregate_status(

@@ -113,11 +113,13 @@ pub(super) fn plan_apply(
         .collect::<Vec<_>>();
     for provider in stale {
         let public_name = provider.trim_start_matches(&provider_prefix);
-        if after
+        let owned_by_context = owner_id(&before, public_name) == Some(desired.id.as_str());
+        let legacy_reference = after
             .get(public_name)
-            .is_some_and(|value| value.value.eq_ignore_ascii_case(&reference(&provider)))
-        {
+            .is_some_and(|value| value.value.eq_ignore_ascii_case(&reference(&provider)));
+        if owned_by_context || legacy_reference {
             after.remove(public_name);
+            after.remove(&owner_name(public_name));
         }
         after.remove(&provider);
     }
@@ -140,30 +142,24 @@ pub(super) fn plan_apply(
     let mut requires_confirmation = false;
     let mut notes = Vec::new();
     for (name, value) in &desired.env {
-        let provider = format!("{provider_prefix}{name}");
-        let provider_ref = reference(&provider);
+        let provider = provider_name(&desired.id, name);
         after.set(EnvValue::expandable(&provider, value));
         if let Some(current) = before.get(name) {
-            if !is_relo_provider_reference(&current.value) && current.value != provider_ref {
+            let managed_by_relo = owner_id(&before, name)
+                .is_some_and(|id| provider_matches_public(&before, id, name))
+                || is_relo_provider_reference(&current.value);
+            if !managed_by_relo {
                 requires_confirmation = true;
                 notes.push(format!(
                     "{name} is externally managed and will not be restored after removal"
                 ));
             }
         }
-        after.set(EnvValue::expandable(name, provider_ref));
+        after.set(EnvValue::string(owner_name(name), &desired.id));
+        after.set(EnvValue::expandable(name, value));
     }
 
-    write_aggregates_and_path(&mut after, prepend, append)?;
-    if before.get("PATH").is_some_and(|value| {
-        value.kind == ValueKind::String
-            && after
-                .get("PATH")
-                .is_some_and(|next| next.kind == ValueKind::ExpandString)
-    }) {
-        requires_confirmation = true;
-        notes.push("Path registry type will change from REG_SZ to REG_EXPAND_SZ".to_owned());
-    }
+    write_aggregates_and_path(&before, &mut after, prepend, append)?;
     validate_snapshot_size(&after)?;
     Ok(Plan::between(before, after, requires_confirmation, notes))
 }
@@ -189,15 +185,24 @@ pub(super) fn plan_remove(before: Snapshot, id: &str) -> Result<Plan> {
     let mut notes = Vec::new();
     for provider in &providers {
         let public_name = provider.trim_start_matches(&provider_prefix);
-        if after
+        let owned_by_context = owner_id(&before, public_name) == Some(id);
+        let provider_matches = provider_matches_public(&before, id, public_name);
+        let legacy_reference = after
             .get(public_name)
-            .is_some_and(|value| value.value.eq_ignore_ascii_case(&reference(provider)))
-        {
+            .is_some_and(|value| value.value.eq_ignore_ascii_case(&reference(provider)));
+        if legacy_reference || (owned_by_context && provider_matches) {
             after.remove(public_name);
             requires_confirmation = true;
             notes.push(format!(
                 "{public_name} has no automatic fallback and will be deleted"
             ));
+        } else if owned_by_context {
+            notes.push(format!(
+                "{public_name} changed outside relo and will be retained"
+            ));
+        }
+        if owned_by_context {
+            after.remove(&owner_name(public_name));
         }
         after.remove(provider);
     }
@@ -210,7 +215,7 @@ pub(super) fn plan_remove(before: Snapshot, id: &str) -> Result<Plan> {
     let mut append = aggregate_references(&before, PATH_APPEND);
     remove_reference(&mut prepend, &token);
     remove_reference(&mut append, &token);
-    write_aggregates_and_path(&mut after, prepend, append)?;
+    write_aggregates_and_path(&before, &mut after, prepend, append)?;
     validate_snapshot_size(&after)?;
     Ok(Plan::between(before, after, requires_confirmation, notes))
 }
@@ -240,10 +245,14 @@ pub(super) fn plan_prune(before: Snapshot) -> Result<Plan> {
 }
 
 fn write_aggregates_and_path(
+    before: &Snapshot,
     snapshot: &mut Snapshot,
     prepend: Vec<String>,
     append: Vec<String>,
 ) -> Result<()> {
+    let old_prepend = aggregate_references(before, PATH_PREPEND);
+    let old_append = aggregate_references(before, PATH_APPEND);
+    let base_path = unmanaged_path_segments(before, &old_prepend, &old_append)?;
     let prepend_value = prepend.join(";");
     let append_value = append.join(";");
     if prepend.is_empty() {
@@ -259,45 +268,107 @@ fn write_aggregates_and_path(
         snapshot.set(EnvValue::expandable(PATH_APPEND, append_value));
     }
 
-    let had_path = snapshot.get("PATH").is_some();
-    let existing = snapshot
-        .get("PATH")
-        .map(|value| value.value.clone())
-        .unwrap_or_default();
-    let mut segments = if had_path {
-        existing
-            .split(';')
-            .filter(|segment| !segment.eq_ignore_ascii_case(&reference(PATH_PREPEND)))
-            .filter(|segment| !segment.eq_ignore_ascii_case(&reference(PATH_APPEND)))
-            .map(str::to_owned)
-            .collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
-    if !prepend.is_empty() {
-        segments.insert(0, reference(PATH_PREPEND));
-    }
-    if !append.is_empty() {
-        segments.push(reference(PATH_APPEND));
-    }
+    let mut segments = managed_path_segments(snapshot, &prepend)?;
+    segments.extend(base_path);
+    segments.extend(managed_path_segments(snapshot, &append)?);
     let value = segments.join(";");
     validate_value_length(&value, "Path")?;
     if value.is_empty() {
         snapshot.remove("PATH");
     } else {
-        let kind = if prepend.is_empty() && append.is_empty() {
-            snapshot
-                .get("PATH")
-                .map(|value| value.kind)
-                .unwrap_or(ValueKind::ExpandString)
-        } else {
-            ValueKind::ExpandString
-        };
+        let kind = before
+            .get("PATH")
+            .map(|value| value.kind)
+            .unwrap_or(ValueKind::ExpandString);
         snapshot.set(EnvValue {
             name: "Path".to_owned(),
             value,
             kind,
         });
     }
+    Ok(())
+}
+
+fn managed_path_segments(snapshot: &Snapshot, references: &[String]) -> Result<Vec<String>> {
+    let mut segments = Vec::new();
+    for token in references {
+        let provider = token.trim_matches('%');
+        let value = snapshot
+            .get(provider)
+            .with_context(|| format!("missing managed PATH provider {provider}"))?;
+        segments.extend(
+            value
+                .value
+                .split(';')
+                .filter(|segment| !segment.is_empty())
+                .map(str::to_owned),
+        );
+    }
+    Ok(segments)
+}
+
+fn unmanaged_path_segments(
+    snapshot: &Snapshot,
+    prepend: &[String],
+    append: &[String],
+) -> Result<Vec<String>> {
+    let mut segments: Vec<String> = snapshot
+        .get("PATH")
+        .map(|value| value.value.split(';').map(str::to_owned).collect())
+        .unwrap_or_default();
+
+    let prepend_anchor = reference(PATH_PREPEND);
+    let append_anchor = reference(PATH_APPEND);
+    if segments
+        .first()
+        .is_some_and(|value| value.eq_ignore_ascii_case(&prepend_anchor))
+    {
+        segments.remove(0);
+    } else {
+        remove_managed_prefix(&mut segments, &managed_path_segments(snapshot, prepend)?)?;
+    }
+    if segments
+        .last()
+        .is_some_and(|value| value.eq_ignore_ascii_case(&append_anchor))
+    {
+        segments.pop();
+    } else {
+        remove_managed_suffix(&mut segments, &managed_path_segments(snapshot, append)?)?;
+    }
+    Ok(segments)
+}
+
+fn remove_managed_prefix(segments: &mut Vec<String>, managed: &[String]) -> Result<()> {
+    if managed.is_empty() {
+        return Ok(());
+    }
+    if segments.len() < managed.len()
+        || !segments
+            .iter()
+            .zip(managed)
+            .all(|(actual, expected)| windows_path_eq(actual, expected))
+    {
+        bail!("Path no longer starts with relo-managed entries; refusing to overwrite it");
+    }
+    segments.drain(..managed.len());
+    Ok(())
+}
+
+fn remove_managed_suffix(segments: &mut Vec<String>, managed: &[String]) -> Result<()> {
+    if managed.is_empty() {
+        return Ok(());
+    }
+    let start = segments
+        .len()
+        .checked_sub(managed.len())
+        .context("Path no longer ends with relo-managed entries; refusing to overwrite it")?;
+    if !segments[start..]
+        .iter()
+        .zip(managed)
+        .all(|(actual, expected)| windows_path_eq(actual, expected))
+    {
+        bail!("Path no longer ends with relo-managed entries; refusing to overwrite it");
+    }
+    segments.truncate(start);
     Ok(())
 }

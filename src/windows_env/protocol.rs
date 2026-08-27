@@ -115,7 +115,18 @@ pub(super) fn validate_protocol(snapshot: &Snapshot) -> Result<()> {
         if matches!(name, PATH_PREPEND | PATH_APPEND) {
             continue;
         }
-        let id = if let Some(id) = name.strip_prefix(CONTEXT_PREFIX) {
+        let id = if let Some(variable) = name.strip_prefix(OWNER_PREFIX) {
+            if variable.is_empty() {
+                bail!("unrecognized reserved environment variable: {name}");
+            }
+            let owner = &snapshot.get(name).expect("name came from snapshot").value;
+            require_binding(snapshot, owner, name)?;
+            let provider = provider_name(owner, variable);
+            if snapshot.get(&provider).is_none() {
+                bail!("cannot verify ownership of {variable}: missing {provider}");
+            }
+            continue;
+        } else if let Some(id) = name.strip_prefix(CONTEXT_PREFIX) {
             id
         } else if let Some(id) = name.strip_prefix(RELEASE_PREFIX) {
             require_binding(snapshot, id, name)?;
@@ -196,10 +207,27 @@ pub(super) fn is_relo_provider_reference(value: &str) -> bool {
     name.starts_with(ENV_PREFIX)
 }
 
-pub(super) fn provider_public_name(provider: &str) -> Option<String> {
-    let rest = provider.strip_prefix(ENV_PREFIX)?;
-    let (_, name) = rest.split_once('_')?;
-    (!name.is_empty()).then(|| name.to_owned())
+pub(super) fn provider_name(id: &str, name: &str) -> String {
+    format!("{ENV_PREFIX}{id}_{name}")
+}
+
+pub(super) fn owner_name(name: &str) -> String {
+    format!("{OWNER_PREFIX}{name}")
+}
+
+pub(super) fn owner_id<'a>(snapshot: &'a Snapshot, name: &str) -> Option<&'a str> {
+    snapshot
+        .get(&owner_name(name))
+        .map(|value| value.value.as_str())
+}
+
+pub(super) fn provider_matches_public(snapshot: &Snapshot, id: &str, name: &str) -> bool {
+    let Some(provider) = snapshot.get(&provider_name(id, name)) else {
+        return false;
+    };
+    snapshot
+        .get(name)
+        .is_some_and(|public| public.value == provider.value && public.kind == provider.kind)
 }
 
 pub(super) fn normalize_name(name: &str) -> String {

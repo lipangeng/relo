@@ -117,10 +117,13 @@ For normal environment variables, the last context applied becomes the active
 provider.
 
 The ownership protocol is visible through reserved `RELO_*` environment
-variables. `Path` contains stable `%RELO_PATH_PREPEND%` and
-`%RELO_PATH_APPEND%` anchors, while each context owns a path variable identified
-by a case-insensitive path hash. `RELO_` is therefore reserved and cannot be used
-as a configured env prefix.
+variables. Each context owns path and environment provider variables identified
+by a case-insensitive path hash. `RELO_PATH_PREPEND` and `RELO_PATH_APPEND`
+record path ordering, while `Path` contains the synchronized concrete entries.
+`RELO_OWNER_<NAME>` records which context owns each public environment variable.
+This avoids relying on recursive expansion between variables written to the same
+Windows environment scope. `RELO_` is therefore reserved and cannot be used as a
+configured env prefix.
 
 Before taking over an existing non-relo variable, `apply` shows the old and new
 values and asks for confirmation. Relo deliberately does not save the original

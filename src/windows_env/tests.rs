@@ -42,8 +42,9 @@ fn latest_apply_wins_env_while_path_keeps_insertion_order() {
     let second = plan_apply(first.after, &desired(B), false).unwrap();
     assert_eq!(
         second.after.get("JAVA_HOME").unwrap().value,
-        format!("%RELO_ENV_{B}_JAVA_HOME%")
+        format!(r"C:\TOOLS\{B}")
     );
+    assert_eq!(second.after.get("RELO_OWNER_JAVA_HOME").unwrap().value, B);
     assert_eq!(
         second.after.get(PATH_PREPEND).unwrap().value,
         format!("%RELO_PATH_{A}%;%RELO_PATH_{B}%")
@@ -51,8 +52,9 @@ fn latest_apply_wins_env_while_path_keeps_insertion_order() {
     let third = plan_apply(second.after, &desired(A), false).unwrap();
     assert_eq!(
         third.after.get("JAVA_HOME").unwrap().value,
-        format!("%RELO_ENV_{A}_JAVA_HOME%")
+        format!(r"C:\TOOLS\{A}")
     );
+    assert_eq!(third.after.get("RELO_OWNER_JAVA_HOME").unwrap().value, A);
     assert_eq!(
         third.after.get(PATH_PREPEND).unwrap().value,
         format!("%RELO_PATH_{A}%;%RELO_PATH_{B}%")
@@ -120,7 +122,20 @@ fn cycles_are_rejected() {
 #[test]
 fn first_path_apply_has_no_empty_path_segment() {
     let plan = plan_apply(Snapshot::default(), &desired(A), false).unwrap();
-    assert_eq!(plan.after.get("PATH").unwrap().value, "%RELO_PATH_PREPEND%");
+    assert_eq!(
+        plan.after.get("PATH").unwrap().value,
+        format!(r"C:\TOOLS\{A}\BIN")
+    );
+}
+
+#[test]
+fn public_values_do_not_depend_on_same_scope_recursive_expansion() {
+    let plan = plan_apply(Snapshot::default(), &desired(A), false).unwrap();
+    assert_eq!(
+        plan.after.get("JAVA_HOME").unwrap().value,
+        format!(r"C:\TOOLS\{A}")
+    );
+    assert!(!plan.after.get("PATH").unwrap().value.contains("%RELO_"));
 }
 
 #[test]
@@ -129,6 +144,23 @@ fn applying_over_external_env_requires_confirmation() {
     let plan = plan_apply(snapshot, &desired(A), false).unwrap();
     assert!(plan.requires_confirmation);
     assert!(plan.notes.iter().any(|note| note.contains("JAVA_HOME")));
+}
+
+#[test]
+fn applying_over_equal_external_env_still_requires_confirmation() {
+    let value = format!(r"C:\TOOLS\{A}");
+    let snapshot = Snapshot::from_values([EnvValue::expandable("JAVA_HOME", value)]).unwrap();
+    let plan = plan_apply(snapshot, &desired(A), false).unwrap();
+    assert!(plan.requires_confirmation);
+}
+
+#[test]
+fn path_drift_blocks_reconciliation() {
+    let first = plan_apply(Snapshot::default(), &desired(A), false).unwrap();
+    let mut snapshot = first.after;
+    snapshot.set(EnvValue::expandable("Path", r"C:\manual"));
+    let err = plan_apply(snapshot, &desired(B), false).unwrap_err();
+    assert!(err.to_string().contains("refusing to overwrite"));
 }
 
 #[test]
@@ -150,6 +182,6 @@ fn status_reports_external_drift_and_dormant_providers() {
     assert!(report
         .issues
         .iter()
-        .any(|issue| issue.contains("externally managed")));
+        .any(|issue| issue.contains("public value was modified")));
     assert!(!report.contexts[0].env[0].active);
 }
