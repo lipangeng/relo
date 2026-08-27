@@ -80,23 +80,22 @@ pub(super) fn plan_apply(
     after.set(EnvValue::string(&context_name, &desired.root));
     after.set(EnvValue::string(&release_name, &desired.release));
 
-    let token = path_reference(&desired.id);
-    let mut prepend = aggregate_references(&before, PATH_PREPEND);
-    let mut append = aggregate_references(&before, PATH_APPEND);
-    let old_prepend = remove_reference(&mut prepend, &token);
-    let old_append = remove_reference(&mut append, &token);
+    let mut prepend = configured_path_ids(&before, CONF_PATH_PREPEND, PATH_PREPEND)?;
+    let mut append = configured_path_ids(&before, CONF_PATH_APPEND, PATH_APPEND)?;
+    let old_prepend = remove_reference(&mut prepend, &desired.id);
+    let old_append = remove_reference(&mut append, &desired.id);
     if desired.path.is_empty() {
         after.remove(&path_name);
     } else {
-        after.set(EnvValue::expandable(&path_name, &desired.path));
+        after.set(EnvValue::string(&path_name, &desired.path));
         if path_append {
-            append.push(token);
+            append.push(desired.id.clone());
         } else if let Some(index) = old_append {
-            append.insert(index.min(append.len()), token);
+            append.insert(index.min(append.len()), desired.id.clone());
         } else if let Some(index) = old_prepend {
-            prepend.insert(index.min(prepend.len()), token);
+            prepend.insert(index.min(prepend.len()), desired.id.clone());
         } else {
-            prepend.push(token);
+            prepend.push(desired.id.clone());
         }
     }
 
@@ -211,11 +210,10 @@ pub(super) fn plan_remove(before: Snapshot, id: &str) -> Result<Plan> {
     after.remove(&format!("{RELEASE_PREFIX}{id}"));
     after.remove(&context_path_name(id));
 
-    let token = path_reference(id);
-    let mut prepend = aggregate_references(&before, PATH_PREPEND);
-    let mut append = aggregate_references(&before, PATH_APPEND);
-    remove_reference(&mut prepend, &token);
-    remove_reference(&mut append, &token);
+    let mut prepend = configured_path_ids(&before, CONF_PATH_PREPEND, PATH_PREPEND)?;
+    let mut append = configured_path_ids(&before, CONF_PATH_APPEND, PATH_APPEND)?;
+    remove_reference(&mut prepend, id);
+    remove_reference(&mut append, id);
     write_aggregates_and_path(&before, &mut after, prepend, append)?;
     validate_snapshot_size(&after)?;
     Ok(Plan::between(before, after, requires_confirmation, notes))
@@ -251,36 +249,53 @@ fn write_aggregates_and_path(
     prepend: Vec<String>,
     append: Vec<String>,
 ) -> Result<()> {
-    let old_prepend = aggregate_references(before, PATH_PREPEND);
-    let old_append = aggregate_references(before, PATH_APPEND);
+    let old_prepend = configured_path_ids(before, CONF_PATH_PREPEND, PATH_PREPEND)?;
+    let old_append = configured_path_ids(before, CONF_PATH_APPEND, PATH_APPEND)?;
     let base_path = unmanaged_path_segments(before, &old_prepend, &old_append)?;
-    let prepend_value = prepend.join(";");
-    let append_value = append.join(";");
     if prepend.is_empty() {
+        snapshot.remove(CONF_PATH_PREPEND);
         snapshot.remove(PATH_PREPEND);
     } else {
-        validate_value_length(&prepend_value, PATH_PREPEND)?;
-        snapshot.set(EnvValue::expandable(PATH_PREPEND, prepend_value));
+        let config_value = prepend.join(";");
+        let aggregate_value = materialized_path_value(snapshot, &prepend)?;
+        validate_value_length(&config_value, CONF_PATH_PREPEND)?;
+        validate_value_length(&aggregate_value, PATH_PREPEND)?;
+        snapshot.set(EnvValue::string(CONF_PATH_PREPEND, config_value));
+        snapshot.set(EnvValue::string(PATH_PREPEND, aggregate_value));
     }
     if append.is_empty() {
+        snapshot.remove(CONF_PATH_APPEND);
         snapshot.remove(PATH_APPEND);
     } else {
-        validate_value_length(&append_value, PATH_APPEND)?;
-        snapshot.set(EnvValue::expandable(PATH_APPEND, append_value));
+        let config_value = append.join(";");
+        let aggregate_value = materialized_path_value(snapshot, &append)?;
+        validate_value_length(&config_value, CONF_PATH_APPEND)?;
+        validate_value_length(&aggregate_value, PATH_APPEND)?;
+        snapshot.set(EnvValue::string(CONF_PATH_APPEND, config_value));
+        snapshot.set(EnvValue::string(PATH_APPEND, aggregate_value));
     }
 
-    let mut segments = managed_path_segments(snapshot, &prepend)?;
+    let mut segments = Vec::new();
+    if !prepend.is_empty() {
+        segments.push(reference(PATH_PREPEND));
+    }
     segments.extend(base_path);
-    segments.extend(managed_path_segments(snapshot, &append)?);
+    if !append.is_empty() {
+        segments.push(reference(PATH_APPEND));
+    }
     let value = segments.join(";");
     validate_value_length(&value, "Path")?;
     if value.is_empty() {
         snapshot.remove("PATH");
     } else {
-        let kind = before
-            .get("PATH")
-            .map(|value| value.kind)
-            .unwrap_or(ValueKind::ExpandString);
+        let kind = if prepend.is_empty() && append.is_empty() {
+            before
+                .get("PATH")
+                .map(|value| value.kind)
+                .unwrap_or(ValueKind::ExpandString)
+        } else {
+            ValueKind::ExpandString
+        };
         snapshot.set(EnvValue {
             name: "Path".to_owned(),
             value,
@@ -291,21 +306,11 @@ fn write_aggregates_and_path(
 }
 
 fn managed_path_segments(snapshot: &Snapshot, references: &[String]) -> Result<Vec<String>> {
-    let mut segments = Vec::new();
-    for token in references {
-        let provider = token.trim_matches('%');
-        let value = snapshot
-            .get(provider)
-            .with_context(|| format!("missing managed PATH provider {provider}"))?;
-        segments.extend(
-            value
-                .value
-                .split(';')
-                .filter(|segment| !segment.is_empty())
-                .map(str::to_owned),
-        );
-    }
-    Ok(segments)
+    Ok(materialized_path_value(snapshot, references)?
+        .split(';')
+        .filter(|segment| !segment.is_empty())
+        .map(str::to_owned)
+        .collect())
 }
 
 fn unmanaged_path_segments(

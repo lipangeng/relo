@@ -1,5 +1,5 @@
-use super::model::{Change, EnvValue, Plan, Scope, Snapshot, ValueKind};
-use super::protocol::context_id_from_normalized;
+use super::model::{Change, EnvValue, Plan, Scope, Snapshot, ValueKind, PATH_APPEND, PATH_PREPEND};
+use super::protocol::{context_id_from_normalized, reference};
 use anyhow::{bail, Context, Result};
 use std::ptr::{null, null_mut};
 use windows_sys::Win32::Foundation::{
@@ -134,16 +134,45 @@ pub(super) fn lock(scope: Scope) -> Result<LockGuard> {
 
 pub(super) fn apply(scope: Scope, plan: &Plan) -> Result<()> {
     let key = open_key(scope, KEY_SET_VALUE)?;
+    let path_change = plan.changes.iter().find(|change| {
+        change.name.eq_ignore_ascii_case("Path")
+            && change.after.as_ref().is_some_and(|value| {
+                value.value.split(';').any(|segment| {
+                    segment.eq_ignore_ascii_case(&reference(PATH_PREPEND))
+                        || segment.eq_ignore_ascii_case(&reference(PATH_APPEND))
+                })
+            })
+    });
+    let detached_path = path_change.and_then(|change| change.before.as_ref());
+    if detached_path.is_some() {
+        delete_value(&key, "Path").context("prepare Path for ordered environment expansion")?;
+    }
+
     let mut applied = Vec::new();
-    for change in &plan.changes {
+    let ordered_changes = plan
+        .changes
+        .iter()
+        .filter(|change| path_change.is_none() || !change.name.eq_ignore_ascii_case("Path"))
+        .chain(path_change);
+    for change in ordered_changes {
         let result = write_change(&key, change, false);
         if let Err(error) = result {
-            let rollback = rollback(&key, &applied);
-            return match rollback {
-                Ok(()) => Err(error).context("apply persistent environment; changes rolled back"),
-                Err(rollback_error) => Err(error).context(format!(
-                    "apply persistent environment; rollback also failed: {rollback_error:#}"
-                )),
+            let mut rollback_failures = Vec::new();
+            if let Err(rollback_error) = rollback(&key, &applied) {
+                rollback_failures.push(format!("changes: {rollback_error:#}"));
+            }
+            if let Some(original_path) = detached_path {
+                if let Err(path_error) = set_value(&key, original_path) {
+                    rollback_failures.push(format!("Path: {path_error:#}"));
+                }
+            }
+            return if rollback_failures.is_empty() {
+                Err(error).context("apply persistent environment; changes rolled back")
+            } else {
+                Err(error).context(format!(
+                    "apply persistent environment; rollback also failed: {}",
+                    rollback_failures.join("; ")
+                ))
             };
         }
         applied.push(change);

@@ -2,7 +2,7 @@ use super::model::*;
 use super::protocol::*;
 use super::reconcile::desired_context;
 use crate::layout::Layout;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::Path;
 
 pub(super) fn build_status(
@@ -10,24 +10,22 @@ pub(super) fn build_status(
     scope: Scope,
     selected: Option<&str>,
 ) -> StatusReport {
-    let prepend = aggregate_references(snapshot, PATH_PREPEND);
-    let append = aggregate_references(snapshot, PATH_APPEND);
+    let prepend =
+        configured_path_ids(snapshot, CONF_PATH_PREPEND, PATH_PREPEND).unwrap_or_default();
+    let append = configured_path_ids(snapshot, CONF_PATH_APPEND, PATH_APPEND).unwrap_or_default();
     let mut issues = Vec::new();
     if let Err(error) = validate_protocol(snapshot) {
         issues.push(format!("protocol conflict: {error:#}"));
     }
-    validate_aggregate_status(snapshot, PATH_PREPEND, &prepend, &mut issues);
-    validate_aggregate_status(snapshot, PATH_APPEND, &append, &mut issues);
     validate_path_layout(snapshot, &prepend, &append, &mut issues);
 
     let mut contexts = discover_contexts(snapshot)
         .into_iter()
         .filter(|(id, _)| selected.is_none_or(|selected| selected == id))
         .map(|(id, path)| {
-            let token = path_reference(&id);
-            let placement = if prepend.iter().any(|item| item.eq_ignore_ascii_case(&token)) {
+            let placement = if prepend.iter().any(|item| item.eq_ignore_ascii_case(&id)) {
                 Some("prepend".to_owned())
-            } else if append.iter().any(|item| item.eq_ignore_ascii_case(&token)) {
+            } else if append.iter().any(|item| item.eq_ignore_ascii_case(&id)) {
                 Some("append".to_owned())
             } else {
                 None
@@ -200,8 +198,16 @@ fn validate_path_layout(
         .get("PATH")
         .map(|value| value.value.split(';').collect::<Vec<_>>())
         .unwrap_or_default();
-    let prepend = path_segments_for_references(snapshot, prepend_references, issues);
-    let append = path_segments_for_references(snapshot, append_references, issues);
+    let prepend = if snapshot.get(CONF_PATH_PREPEND).is_some() && !prepend_references.is_empty() {
+        vec![reference(PATH_PREPEND)]
+    } else {
+        path_segments_for_ids(snapshot, prepend_references, issues)
+    };
+    let append = if snapshot.get(CONF_PATH_APPEND).is_some() && !append_references.is_empty() {
+        vec![reference(PATH_APPEND)]
+    } else {
+        path_segments_for_ids(snapshot, append_references, issues)
+    };
     if segments.len() < prepend.len() + append.len()
         || !segments
             .iter()
@@ -218,15 +224,15 @@ fn validate_path_layout(
     }
 }
 
-fn path_segments_for_references(
+fn path_segments_for_ids(
     snapshot: &Snapshot,
-    references: &[String],
+    ids: &[String],
     issues: &mut Vec<String>,
 ) -> Vec<String> {
     let mut segments = Vec::new();
-    for token in references {
-        let provider = token.trim_matches('%');
-        let Some(value) = snapshot.get(provider) else {
+    for id in ids {
+        let provider = context_path_name(id);
+        let Some(value) = snapshot.get(&provider) else {
             issues.push(format!("missing managed PATH provider {provider}"));
             continue;
         };
@@ -239,24 +245,6 @@ fn path_segments_for_references(
         );
     }
     segments
-}
-
-fn validate_aggregate_status(
-    snapshot: &Snapshot,
-    name: &str,
-    references: &[String],
-    issues: &mut Vec<String>,
-) {
-    let mut seen = BTreeSet::new();
-    for token in references {
-        if !seen.insert(normalize_name(token)) {
-            issues.push(format!("{name} contains duplicate reference {token}"));
-        }
-        let provider = token.trim_matches('%');
-        if snapshot.get(provider).is_none() {
-            issues.push(format!("{name} references missing provider {provider}"));
-        }
-    }
 }
 
 pub(super) fn print_status(report: &StatusReport) {

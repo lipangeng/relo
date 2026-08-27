@@ -1,6 +1,6 @@
 use super::*;
-use crate::windows_env::model::DesiredContext;
-use crate::windows_env::protocol::context_id_from_normalized;
+use crate::windows_env::model::{DesiredContext, CONF_PATH_PREPEND, PATH_PREPEND};
+use crate::windows_env::protocol::{context_id_from_normalized, reference};
 use crate::windows_env::reconcile::{plan_apply, plan_remove};
 use std::collections::BTreeMap;
 use windows_sys::Win32::Security::{TOKEN_DUPLICATE, TOKEN_QUERY};
@@ -35,6 +35,24 @@ fn persistent_environment_is_visible_in_a_fresh_user_environment_block() {
         let applied = plan_apply(before.clone(), &desired, false)?;
         apply(Scope::User, &applied)?;
         let persisted = read(Scope::User)?;
+        if persisted.get(CONF_PATH_PREPEND).map(|value| &value.value) != Some(&id) {
+            bail!("PATH context order was not persisted");
+        }
+        if persisted.get(PATH_PREPEND).map(|value| &value.value) != Some(&concrete_path) {
+            bail!("PATH aggregate was not materialized");
+        }
+        let persisted_path = persisted
+            .get("Path")
+            .map(|value| value.value.as_str())
+            .unwrap_or_default();
+        let prepend_anchor = reference(PATH_PREPEND);
+        if !persisted_path
+            .split(';')
+            .next()
+            .is_some_and(|segment| segment.eq_ignore_ascii_case(&prepend_anchor))
+        {
+            bail!("Path does not contain the prepend aggregate anchor");
+        }
         let repeated = plan_apply(persisted.clone(), &desired, false)?;
         if !repeated.is_empty() {
             bail!("repeated apply was not idempotent");
@@ -42,14 +60,17 @@ fn persistent_environment_is_visible_in_a_fresh_user_environment_block() {
 
         let environment = fresh_user_environment()?;
         if environment.get(&public_name.to_ascii_uppercase()) != Some(&concrete_value) {
-            bail!("provider reference was not expanded in a fresh environment block");
+            bail!("public environment value was not visible in a fresh environment block");
+        }
+        if environment.get(PATH_PREPEND) != Some(&concrete_path) {
+            bail!("materialized PATH aggregate was not visible in a fresh environment block");
         }
         let effective_path = environment.get("PATH").cloned().unwrap_or_default();
         if !effective_path
             .split(';')
             .any(|entry| entry.eq_ignore_ascii_case(&concrete_path))
         {
-            bail!("nested relo PATH references were not expanded");
+            bail!("the one-level relo PATH aggregate was not expanded");
         }
 
         let removed = plan_remove(persisted, &id)?;

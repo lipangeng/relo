@@ -114,28 +114,70 @@ pub(super) fn has_context_namespace(snapshot: &Snapshot, id: &str) -> bool {
         .any(|name| exact.iter().any(|exact| name == exact) || name.starts_with(&env_prefix))
 }
 
-pub(super) fn aggregate_references(snapshot: &Snapshot, name: &str) -> Vec<String> {
-    let values: Vec<String> = snapshot
+pub(super) fn configured_path_ids(
+    snapshot: &Snapshot,
+    config_name: &str,
+    aggregate_name: &str,
+) -> Result<Vec<String>> {
+    if let Some(config) = snapshot.get(config_name) {
+        return Ok(config
+            .value
+            .split(';')
+            .filter(|id| !id.is_empty())
+            .map(normalize_name)
+            .collect());
+    }
+    legacy_aggregate_ids(snapshot, aggregate_name)
+}
+
+fn legacy_aggregate_ids(snapshot: &Snapshot, name: &str) -> Result<Vec<String>> {
+    snapshot
         .get(name)
         .map(|value| {
             value
                 .value
                 .split(';')
-                .filter(|item| !item.is_empty())
-                .map(str::to_owned)
+                .filter(|token| !token.is_empty())
+                .map(|token| {
+                    token
+                        .strip_prefix('%')
+                        .and_then(|token| token.strip_suffix('%'))
+                        .and_then(|provider| provider.strip_prefix(PATH_PREFIX))
+                        .map(normalize_name)
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("{name} contains a non-relo path entry: {token}")
+                        })
+                })
                 .collect()
         })
-        .unwrap_or_default();
-    let mut seen = BTreeSet::new();
-    values
-        .into_iter()
-        .filter(|value| seen.insert(normalize_name(value)))
-        .collect()
+        .transpose()
+        .map(Option::unwrap_or_default)
+}
+
+pub(super) fn materialized_path_value(snapshot: &Snapshot, ids: &[String]) -> Result<String> {
+    let mut segments = Vec::new();
+    for id in ids {
+        let provider = context_path_name(id);
+        let value = snapshot
+            .get(&provider)
+            .ok_or_else(|| anyhow::anyhow!("missing managed PATH provider {provider}"))?;
+        segments.extend(
+            value
+                .value
+                .split(';')
+                .filter(|segment| !segment.is_empty())
+                .map(str::to_owned),
+        );
+    }
+    Ok(segments.join(";"))
 }
 
 pub(super) fn validate_protocol(snapshot: &Snapshot) -> Result<()> {
     for name in snapshot.names().filter(|name| name.starts_with("RELO_")) {
-        if matches!(name, PATH_PREPEND | PATH_APPEND) {
+        if matches!(
+            name,
+            PATH_PREPEND | PATH_APPEND | CONF_PATH_PREPEND | CONF_PATH_APPEND
+        ) {
             continue;
         }
         let id = if let Some(variable) = name.strip_prefix(OWNER_PREFIX) {
@@ -172,20 +214,32 @@ pub(super) fn validate_protocol(snapshot: &Snapshot) -> Result<()> {
         validate_context_id(id)?;
     }
 
-    for aggregate in [PATH_PREPEND, PATH_APPEND] {
-        if let Some(value) = snapshot.get(aggregate) {
-            for token in value.value.split(';').filter(|token| !token.is_empty()) {
-                let Some(provider) = token
-                    .strip_prefix('%')
-                    .and_then(|token| token.strip_suffix('%'))
-                else {
-                    bail!("{aggregate} contains a non-relo path entry: {token}");
-                };
-                let Some(id) = provider.strip_prefix(PATH_PREFIX) else {
-                    bail!("{aggregate} contains an invalid reference: {token}");
-                };
-                validate_context_id(id)?;
-                require_binding(snapshot, id, token)?;
+    for (config, aggregate) in [
+        (CONF_PATH_PREPEND, PATH_PREPEND),
+        (CONF_PATH_APPEND, PATH_APPEND),
+    ] {
+        let ids = configured_path_ids(snapshot, config, aggregate)?;
+        let mut seen = BTreeSet::new();
+        for id in &ids {
+            validate_context_id(id)?;
+            require_binding(snapshot, id, config)?;
+            if !seen.insert(id) {
+                bail!("{config} contains duplicate context id {id}");
+            }
+            if snapshot.get(&context_path_name(id)).is_none() {
+                bail!("{config} references missing PATH provider {PATH_PREFIX}{id}");
+            }
+        }
+        if snapshot.get(config).is_some() {
+            if ids.is_empty() {
+                bail!("{config} must not be empty");
+            }
+            let expected = materialized_path_value(snapshot, &ids)?;
+            let Some(actual) = snapshot.get(aggregate) else {
+                bail!("{config} exists but {aggregate} is missing");
+            };
+            if actual.value != expected {
+                bail!("{aggregate} does not match the context order in {config}");
             }
         }
     }
@@ -210,10 +264,6 @@ pub(super) fn remove_reference(references: &mut Vec<String>, target: &str) -> Op
 
 pub(super) fn context_path_name(id: &str) -> String {
     format!("{PATH_PREFIX}{id}")
-}
-
-pub(super) fn path_reference(id: &str) -> String {
-    reference(&context_path_name(id))
 }
 
 pub(super) fn reference(name: &str) -> String {
@@ -350,15 +400,14 @@ pub(super) fn context_status_rank(
     prepend: &[String],
     append: &[String],
 ) -> (u8, usize) {
-    let token = path_reference(&context.id);
     if let Some(index) = prepend
         .iter()
-        .position(|entry| entry.eq_ignore_ascii_case(&token))
+        .position(|entry| entry.eq_ignore_ascii_case(&context.id))
     {
         (0, index)
     } else if let Some(index) = append
         .iter()
-        .position(|entry| entry.eq_ignore_ascii_case(&token))
+        .position(|entry| entry.eq_ignore_ascii_case(&context.id))
     {
         (1, index)
     } else {

@@ -1,5 +1,6 @@
 use super::model::{
-    DesiredContext, EnvValue, Scope, Snapshot, CONTEXT_ID_LEN, PATH_APPEND, PATH_PREPEND,
+    DesiredContext, EnvValue, Scope, Snapshot, ValueKind, CONF_PATH_APPEND, CONF_PATH_PREPEND,
+    CONTEXT_ID_LEN, PATH_APPEND, PATH_PREPEND,
 };
 use super::protocol::{
     context_id_from_normalized, external_windows_path, validate_context_id,
@@ -77,8 +78,16 @@ fn latest_apply_wins_env_while_path_keeps_insertion_order() {
     );
     assert_eq!(second.after.get("RELO_OWNER_JAVA_HOME").unwrap().value, B);
     assert_eq!(
+        second.after.get(CONF_PATH_PREPEND).unwrap().value,
+        format!("{A};{B}")
+    );
+    assert_eq!(
         second.after.get(PATH_PREPEND).unwrap().value,
-        format!("%RELO_PATH_{A}%;%RELO_PATH_{B}%")
+        format!(r"C:\TOOLS\{A}\BIN;C:\TOOLS\{B}\BIN")
+    );
+    assert_eq!(
+        second.after.get("PATH").unwrap().value,
+        "%RELO_PATH_PREPEND%"
     );
     let third = plan_apply(second.after, &desired(A), false).unwrap();
     assert_eq!(
@@ -87,8 +96,12 @@ fn latest_apply_wins_env_while_path_keeps_insertion_order() {
     );
     assert_eq!(third.after.get("RELO_OWNER_JAVA_HOME").unwrap().value, A);
     assert_eq!(
+        third.after.get(CONF_PATH_PREPEND).unwrap().value,
+        format!("{A};{B}")
+    );
+    assert_eq!(
         third.after.get(PATH_PREPEND).unwrap().value,
-        format!("%RELO_PATH_{A}%;%RELO_PATH_{B}%")
+        format!(r"C:\TOOLS\{A}\BIN;C:\TOOLS\{B}\BIN")
     );
 }
 
@@ -110,13 +123,79 @@ fn append_moves_only_the_selected_context() {
     let first = plan_apply(Snapshot::default(), &desired(A), false).unwrap();
     let second = plan_apply(first.after, &desired(B), false).unwrap();
     let moved = plan_apply(second.after, &desired(A), true).unwrap();
+    assert_eq!(moved.after.get(CONF_PATH_PREPEND).unwrap().value, B);
     assert_eq!(
         moved.after.get(PATH_PREPEND).unwrap().value,
-        format!("%RELO_PATH_{B}%")
+        format!(r"C:\TOOLS\{B}\BIN")
     );
+    assert_eq!(moved.after.get(CONF_PATH_APPEND).unwrap().value, A);
     assert_eq!(
         moved.after.get(PATH_APPEND).unwrap().value,
-        format!("%RELO_PATH_{A}%")
+        format!(r"C:\TOOLS\{A}\BIN")
+    );
+    assert_eq!(
+        moved.after.get("PATH").unwrap().value,
+        "%RELO_PATH_PREPEND%;%RELO_PATH_APPEND%"
+    );
+}
+
+#[test]
+fn legacy_reference_aggregates_migrate_to_config_and_concrete_values() {
+    let first = plan_apply(Snapshot::default(), &desired(A), false).unwrap();
+    let mut legacy = first.after;
+    legacy.remove(CONF_PATH_PREPEND);
+    legacy.set(EnvValue::expandable(
+        PATH_PREPEND,
+        format!("%RELO_PATH_{A}%"),
+    ));
+    legacy.set(EnvValue::expandable("Path", format!(r"C:\TOOLS\{A}\BIN")));
+
+    let migrated = plan_apply(legacy, &desired(A), false).unwrap();
+    assert_eq!(migrated.after.get(CONF_PATH_PREPEND).unwrap().value, A);
+    assert_eq!(
+        migrated.after.get(PATH_PREPEND).unwrap().value,
+        format!(r"C:\TOOLS\{A}\BIN")
+    );
+    assert_eq!(
+        migrated.after.get("Path").unwrap().value,
+        "%RELO_PATH_PREPEND%"
+    );
+}
+
+#[test]
+fn removing_context_rebuilds_config_aggregate_and_path_anchor() {
+    let first = plan_apply(Snapshot::default(), &desired(A), false).unwrap();
+    let second = plan_apply(first.after, &desired(B), false).unwrap();
+    let removed_a = plan_remove(second.after, A).unwrap();
+    assert_eq!(removed_a.after.get(CONF_PATH_PREPEND).unwrap().value, B);
+    assert_eq!(
+        removed_a.after.get(PATH_PREPEND).unwrap().value,
+        format!(r"C:\TOOLS\{B}\BIN")
+    );
+    assert_eq!(
+        removed_a.after.get("Path").unwrap().value,
+        "%RELO_PATH_PREPEND%"
+    );
+
+    let removed_b = plan_remove(removed_a.after, B).unwrap();
+    assert!(removed_b.after.get(CONF_PATH_PREPEND).is_none());
+    assert!(removed_b.after.get(PATH_PREPEND).is_none());
+    assert!(removed_b.after.get("Path").is_none());
+}
+
+#[test]
+fn external_path_is_preserved_between_relo_anchors() {
+    let snapshot =
+        Snapshot::from_values([EnvValue::expandable("Path", r"C:\Windows\System32")]).unwrap();
+    let applied = plan_apply(snapshot, &desired(A), false).unwrap();
+    assert_eq!(
+        applied.after.get("Path").unwrap().value,
+        r"%RELO_PATH_PREPEND%;C:\Windows\System32"
+    );
+    let removed = plan_remove(applied.after, A).unwrap();
+    assert_eq!(
+        removed.after.get("Path").unwrap().value,
+        r"C:\Windows\System32"
     );
 }
 
@@ -153,20 +232,35 @@ fn cycles_are_rejected() {
 #[test]
 fn first_path_apply_has_no_empty_path_segment() {
     let plan = plan_apply(Snapshot::default(), &desired(A), false).unwrap();
+    assert_eq!(plan.after.get(CONF_PATH_PREPEND).unwrap().value, A);
     assert_eq!(
-        plan.after.get("PATH").unwrap().value,
+        plan.after.get(CONF_PATH_PREPEND).unwrap().kind,
+        ValueKind::String
+    );
+    assert_eq!(
+        plan.after.get(PATH_PREPEND).unwrap().value,
         format!(r"C:\TOOLS\{A}\BIN")
+    );
+    assert_eq!(
+        plan.after.get(PATH_PREPEND).unwrap().kind,
+        ValueKind::String
+    );
+    assert_eq!(plan.after.get("PATH").unwrap().value, "%RELO_PATH_PREPEND%");
+    assert_eq!(
+        plan.after.get("PATH").unwrap().kind,
+        ValueKind::ExpandString
     );
 }
 
 #[test]
-fn public_values_do_not_depend_on_same_scope_recursive_expansion() {
+fn path_uses_only_one_level_of_environment_expansion() {
     let plan = plan_apply(Snapshot::default(), &desired(A), false).unwrap();
     assert_eq!(
         plan.after.get("JAVA_HOME").unwrap().value,
         format!(r"C:\TOOLS\{A}")
     );
-    assert!(!plan.after.get("PATH").unwrap().value.contains("%RELO_"));
+    assert_eq!(plan.after.get("PATH").unwrap().value, "%RELO_PATH_PREPEND%");
+    assert!(!plan.after.get(PATH_PREPEND).unwrap().value.contains('%'));
 }
 
 #[test]
@@ -201,6 +295,15 @@ fn unknown_reserved_state_is_rejected() {
     assert!(err
         .to_string()
         .contains("unrecognized reserved environment variable"));
+}
+
+#[test]
+fn aggregate_drift_is_rejected() {
+    let first = plan_apply(Snapshot::default(), &desired(A), false).unwrap();
+    let mut snapshot = first.after;
+    snapshot.set(EnvValue::string(PATH_PREPEND, r"C:\manual"));
+    let err = plan_apply(snapshot, &desired(B), false).unwrap_err();
+    assert!(err.to_string().contains("does not match the context order"));
 }
 
 #[test]

@@ -182,9 +182,11 @@ relo win env apply 3.9.9 --scope system --yes
 
 所有权协议通过保留的 `RELO_*` 环境变量公开表达。每个 context 使用由大小写
 不敏感路径哈希生成的 ID 管理自己的 PATH 和环境变量 provider；
-`RELO_PATH_PREPEND` 与 `RELO_PATH_APPEND` 记录 PATH 顺序，`Path` 中写入同步后的
-具体路径；`RELO_OWNER_<NAME>` 记录公共环境变量当前由哪个 context 管理。这样不再
-依赖 Windows 对同一作用域内变量的递归展开。因此 `RELO_` 是保留前缀，不能用于
+`RELO_CONF_PATH_PREPEND` 与 `RELO_CONF_PATH_APPEND` 按顺序记录 context ID，
+`RELO_PATH_PREPEND` 与 `RELO_PATH_APPEND` 保存根据该顺序物化的具体路径，`Path`
+直接引用这两个 aggregate。`RELO_OWNER_<NAME>` 记录公共环境变量当前由哪个 context
+管理。这样 Path 只需一级展开，不再依赖 context provider 的递归展开。旧版引用型
+aggregate 状态会在下一次写操作时自动迁移。因此 `RELO_` 是保留前缀，不能用于
 `relo.yaml` 的持久 env 配置。
 
 首次接管非 relo 环境变量前，`apply` 会展示旧值和新值并要求确认。relo 不保存

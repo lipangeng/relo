@@ -124,12 +124,14 @@ provider.
 
 The ownership protocol is visible through reserved `RELO_*` environment
 variables. Each context owns path and environment provider variables identified
-by a case-insensitive path hash. `RELO_PATH_PREPEND` and `RELO_PATH_APPEND`
-record path ordering, while `Path` contains the synchronized concrete entries.
-`RELO_OWNER_<NAME>` records which context owns each public environment variable.
-This avoids relying on recursive expansion between variables written to the same
-Windows environment scope. `RELO_` is therefore reserved and cannot be used as a
-configured env prefix.
+by a case-insensitive path hash. `RELO_CONF_PATH_PREPEND` and
+`RELO_CONF_PATH_APPEND` record ordered context IDs. `RELO_PATH_PREPEND` and
+`RELO_PATH_APPEND` contain the corresponding materialized concrete paths, and
+`Path` references those aggregates directly. `RELO_OWNER_<NAME>` records which
+context owns each public environment variable. This keeps `Path` expansion to
+one level and avoids recursive expansion between context providers. Existing
+reference-based aggregate state is migrated on the next write. `RELO_` is
+therefore reserved and cannot be used as a configured env prefix.
 
 Before taking over an existing non-relo variable, `apply` shows the old and new
 values and asks for confirmation. Relo deliberately does not save the original
