@@ -122,6 +122,7 @@ relo [-d <dir>] use -g [version]
 relo [-d <dir>] print <context|ctx|active|release|home|version|path|env> [--version <version>]
 relo [-d <dir>] config [show]
 relo [-d <dir>] mac unblock [-v] [version]
+relo [-d <dir>] win unblock [-v] [version]
 relo [-d <dir>] win env apply [version] [--scope user|system] [--path-append] [--yes] [--dry-run]
 relo [-d <dir>] win env status [--scope user|system] [--all] [--json]
 relo [-d <dir>] win env remove [--scope user|system] [--id <context-id>] [--yes] [--dry-run]
@@ -157,6 +158,19 @@ relo mac unblock 3.9.9
 ```bash
 relo mac unblock -v 3.9.9
 ```
+
+### Windows 下载标记
+
+Windows 可能给下载的文件添加 `Zone.Identifier` 数据流（Mark of the Web），导致脚本或程序被阻止运行。确认 release 来源可信后，可以显式清除其文件的下载标记：
+
+```powershell
+relo win unblock 3.9.9
+relo win unblock -v
+```
+
+省略版本时优先选择 active release，否则选择 latest。命令递归处理选中的 release，跳过符号链接、junction 和其他 reparse point；没有下载标记的文件无需处理，可重复执行。`-v` / `--verbose` 在 stderr 显示版本、release 路径、已解锁文件和跳过的链接。
+
+该命令仅在 Windows 上可用，只移除文件的 `Zone.Identifier` 数据流，不修改文件内容、其他数据流、权限或系统安全策略，也不会在 `init` 或 `use` 时自动执行。遇到读取或删除错误时会报告路径并返回失败；此前已清除的标记不会回滚。解除下载标记不保证消除其他原因造成的运行限制。
 
 ### Windows 持久环境变量
 

@@ -70,6 +70,7 @@ relo [-d <dir>] use -g [version]
 relo [-d <dir>] print <context|ctx|active|release|home|version|path|env> [--version <version>]
 relo [-d <dir>] config [show]
 relo [-d <dir>] mac unblock [-v] [version]
+relo [-d <dir>] win unblock [-v] [version]
 relo [-d <dir>] win env apply [version] [--scope user|system] [--path-append] [--yes] [--dry-run]
 relo [-d <dir>] win env status [--scope user|system] [--all] [--json]
 relo [-d <dir>] win env remove [--scope user|system] [--id <context-id>] [--yes] [--dry-run]
@@ -95,6 +96,29 @@ Pass `-v` or `--verbose` to print the selected version, release path, quarantine
 ```bash
 relo mac unblock -v 3.9.9
 ```
+
+### Windows download marks
+
+Windows can mark downloaded files with a `Zone.Identifier` alternate data stream
+(Mark of the Web), which can block scripts or programs. After verifying that a
+release is trusted, explicitly remove its files' download marks:
+
+```powershell
+relo win unblock 3.9.9
+relo win unblock -v
+```
+
+Without a version, the command selects the active release, or latest when none is
+active. It recursively processes the selected release, skipping symbolic links,
+junctions, and other reparse points. Files without download marks need no change,
+so repeated runs are safe. `-v` / `--verbose` reports the version, release path,
+unblocked files, and skipped links to stderr.
+
+This Windows-only command removes only files' `Zone.Identifier` streams. It does
+not change file contents, other streams, permissions, or system security policies,
+and never runs automatically during `init` or `use`. Read or deletion errors report
+the affected path and fail the command; marks already removed are not rolled back.
+Removing download marks does not resolve restrictions caused by other mechanisms.
 
 ### Persistent Windows environment
 

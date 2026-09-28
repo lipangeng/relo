@@ -7,6 +7,7 @@ mod paths;
 mod shell;
 mod version;
 mod windows_env;
+mod windows_unblock;
 
 use anyhow::Result;
 use clap::{CommandFactory, Parser};
@@ -230,12 +231,25 @@ fn run() -> Result<()> {
                 println!("unblocked: {}", release.id);
             }
         },
-        Command::Win { command } => {
-            windows_env::ensure_supported()?;
-            match command {
-                WinCommand::Env { command } => windows_env::run(&logical_root, &root, command)?,
+        Command::Win { command } => match command {
+            WinCommand::Env { command } => {
+                windows_env::ensure_supported()?;
+                windows_env::run(&logical_root, &root, command)?;
             }
-        }
+            WinCommand::Unblock { verbose, version } => {
+                windows_unblock::ensure_supported()?;
+                let layout = Layout::load(root)?;
+                let release = print_release(&layout, version.as_deref())?;
+                if verbose > 0 {
+                    eprintln!("version: {}", release.id);
+                    eprintln!("release: {}", paths::display(&release.path));
+                    eprintln!("stream: Zone.Identifier");
+                    eprintln!("recursive: yes");
+                }
+                windows_unblock::unblock(&release.path, verbose > 0)?;
+                println!("unblocked: {}", release.id);
+            }
+        },
     }
 
     Ok(())

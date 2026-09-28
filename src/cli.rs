@@ -60,7 +60,7 @@ pub enum Command {
         #[command(subcommand)]
         command: MacCommand,
     },
-    /// Windows-specific environment integration
+    /// Windows-specific utilities
     Win {
         #[command(subcommand)]
         command: WinCommand,
@@ -130,6 +130,13 @@ pub enum MacCommand {
 
 #[derive(Clone, Subcommand)]
 pub enum WinCommand {
+    /// Remove Windows download marks from files in a release
+    Unblock {
+        #[arg(short = 'v', long = "verbose", action = clap::ArgAction::Count,
+            help = "Show release details and unblocked or skipped paths")]
+        verbose: u8,
+        version: Option<String>,
+    },
     /// Manage persistent Windows environment variables
     Env {
         #[command(subcommand)]

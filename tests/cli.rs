@@ -233,6 +233,118 @@ fn mac_unblock_reports_unsupported_platform() {
 
 #[cfg(not(windows))]
 #[test]
+fn win_unblock_reports_unsupported_platform_before_loading_context() {
+    let root = temp_root("win-unblock-platform");
+    let err = assert_failure(run(&root, &["win", "unblock"]));
+    assert!(
+        err.contains("win unblock is only supported on Windows"),
+        "{err}"
+    );
+    assert!(!err.contains("not a relo context"));
+}
+
+#[cfg(windows)]
+fn mark_downloaded(path: &Path) -> PathBuf {
+    let mut stream = path.as_os_str().to_os_string();
+    stream.push(":Zone.Identifier");
+    let stream = PathBuf::from(stream);
+    fs::write(&stream, "[ZoneTransfer]\r\nZoneId=3\r\n").unwrap();
+    stream
+}
+
+#[cfg(windows)]
+#[test]
+fn win_unblock_removes_only_selected_release_marks_and_preserves_contents() {
+    let root = temp_root("win-unblock-selected");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+    mkdir_release(&root, "2.0.0");
+    let file = root.join("releases/1.0.0/bin/工具 [1].exe");
+    fs::write(&file, b"program contents").unwrap();
+    let stream = mark_downloaded(&file);
+    let other = root.join("releases/2.0.0/bin/other.exe");
+    fs::write(&other, b"other").unwrap();
+    let other_stream = mark_downloaded(&other);
+    let extra_stream = file.with_file_name("工具 [1].exe:custom");
+    fs::write(&extra_stream, b"keep").unwrap();
+    junction::create(
+        root.join("releases/2.0.0"),
+        root.join("releases/1.0.0/linked"),
+    )
+    .unwrap();
+
+    let (out, err) = assert_success_output(run(&root, &["win", "unblock", "-v", "1.0"]));
+    assert_eq!(out, "unblocked: 1.0.0\n");
+    assert!(err.contains("Zone.Identifier"));
+    assert!(err.contains("工具 [1].exe"));
+    assert!(err.contains("skipped"));
+    assert!(!stream.exists());
+    assert!(other_stream.exists());
+    assert_eq!(fs::read(&file).unwrap(), b"program contents");
+    assert_eq!(fs::read(&extra_stream).unwrap(), b"keep");
+    assert!(!root.join("active").exists());
+    let (out, err) = assert_success_output(run(&root, &["win", "unblock", "1.0"]));
+    assert_eq!(out, "unblocked: 1.0.0\n");
+    assert!(err.is_empty());
+}
+
+#[cfg(windows)]
+#[test]
+fn win_unblock_reports_locked_stream_without_claiming_success() {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let root = temp_root("win-unblock-locked");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+    let file = root.join("releases/1.0.0/bin/locked.exe");
+    fs::write(&file, b"app").unwrap();
+    let stream = mark_downloaded(&file);
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(0)
+        .open(&stream)
+        .unwrap();
+    let output = run(&root, &["win", "unblock"]);
+    assert!(stdout(&output).is_empty());
+    let err = assert_failure(output);
+    assert!(err.contains("locked.exe"));
+    assert!(err.contains("Zone.Identifier"));
+    drop(lock);
+    assert!(stream.exists());
+    assert_success(run(&root, &["win", "unblock"]));
+    assert!(!stream.exists());
+}
+
+#[cfg(windows)]
+#[test]
+fn win_unblock_defaults_to_latest_then_active() {
+    let root = temp_root("win-unblock-default");
+    init(&root);
+    for version in ["1.0.0", "2.0.0"] {
+        mkdir_release(&root, version);
+        let file = root.join("releases").join(version).join("bin/app.exe");
+        fs::write(&file, b"app").unwrap();
+        mark_downloaded(&file);
+    }
+    let older = root.join("releases/1.0.0/bin/app.exe:Zone.Identifier");
+    let latest = root.join("releases/2.0.0/bin/app.exe:Zone.Identifier");
+    assert_eq!(
+        assert_success(run(&root, &["win", "unblock"])),
+        "unblocked: 2.0.0\n"
+    );
+    assert!(older.exists());
+    assert!(!latest.exists());
+    assert_success(run(&root, &["use", "-g", "1.0.0"]));
+    assert_eq!(
+        assert_success(run(&root, &["win", "unblock"])),
+        "unblocked: 1.0.0\n"
+    );
+    assert!(!older.exists());
+    assert_active_target(&root, "1.0.0");
+}
+
+#[cfg(not(windows))]
+#[test]
 fn win_env_reports_unsupported_platform_before_loading_context() {
     let root = temp_root("win-env-platform");
     let err = assert_failure(run(&root, &["win", "env", "status"]));
