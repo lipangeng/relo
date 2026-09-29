@@ -792,13 +792,13 @@ fn print_path_without_version_prefers_active_then_latest() {
 
     assert_eq!(
         assert_success(run(&root, &["print", "path"])),
-        format!("{}\n", root.join("active/bin").display())
+        format!("{}\n", root.join("active").join("bin").display())
     );
 
     assert_success(run(&root, &["use", "-g", "1.0.0"]));
     assert_eq!(
         assert_success(run(&root, &["print", "path"])),
-        format!("{}\n", root.join("active/bin").display())
+        format!("{}\n", root.join("active").join("bin").display())
     );
 }
 
@@ -1143,7 +1143,7 @@ fn versioned_home_prints_and_use_creates_version_home() {
     assert_success(run(&root, &["init", "--home", "versioned"]));
     mkdir_release(&root, "3.9.9");
 
-    let expected = root.join("homes/3.9.9");
+    let expected = root.join("homes").join("3.9.9");
     assert_eq!(
         assert_success(run(&root, &["print", "home", "--version", "3.9"])),
         format!("{}\n", expected.display())
