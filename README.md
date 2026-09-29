@@ -194,9 +194,9 @@ You can also use a downloaded `relo` binary to initialize a context for managing
 ```bash
 mkdir -p ~/Documents/30_Toolchain/relo
 ./relo -d ~/Documents/30_Toolchain/relo init
-mkdir -p ~/Documents/30_Toolchain/relo/releases/0.2.2/bin
-cp ./relo ~/Documents/30_Toolchain/relo/releases/0.2.2/bin/relo
-~/Documents/30_Toolchain/relo/releases/0.2.2/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.2.2
+mkdir -p ~/Documents/30_Toolchain/relo/releases/0.2.3/bin
+cp ./relo ~/Documents/30_Toolchain/relo/releases/0.2.3/bin/relo
+~/Documents/30_Toolchain/relo/releases/0.2.3/bin/relo -d ~/Documents/30_Toolchain/relo use -g 0.2.3
 ```
 
 After that, add `~/Documents/30_Toolchain/relo/active/bin` to your shell `PATH`, or invoke `relo` from that active path.
