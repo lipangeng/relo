@@ -109,6 +109,8 @@ cp ./relo ~/Documents/30_Toolchain/relo/releases/0.2.3/bin/relo
 
 如果省略 `version`，`relo use`、`relo print release`、`relo print path`、`relo print env` 等需要 release 上下文的命令会优先选择 active release；如果还没有 active，则选择 `latest`。
 
+`relo use -g` 在现有 `active` 链接指向不存在或无效的 release 时，也会选择 `latest` 并重建链接。不会删除 `active` 位置的真实文件或目录；如果没有可用 release，则保留原链接并报错。
+
 ## 命令总览
 
 ```bash
@@ -445,7 +447,7 @@ Release 专属的 `path` 条目排在全局 path 条目之前。`path` 在 env �
 
 `active exists but is not a managed link`：`active` 已存在但不是 relo 管理的符号链接或 junction。为了避免覆盖用户文件，`relo` 会拒绝继续。
 
-`active points to missing release`：`active` 指向的 release 目录不存在。需要恢复该 release，或用 `relo use -g <version>` 切换到存在的 release。
+`active points to missing release`：`active` 指向的 release 目录不存在。可以恢复该 release，用 `relo use -g` 自动选择 latest 并重建链接，或用 `relo use -g <version>` 切换到指定 release。
 
 `invalid release directory`：`releases/` 下的目录名不是 `<version>` 或 `<version>_<label>`。
 

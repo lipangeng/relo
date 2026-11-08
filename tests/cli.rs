@@ -1333,6 +1333,85 @@ fn global_use_without_version_keeps_active_release() {
     assert_active_target(&root, "1.0.0");
 }
 
+#[test]
+fn global_use_without_version_repairs_missing_active_release() {
+    let root = temp_root("global-missing-active");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+    mkdir_release(&root, "2.0.0");
+    assert_success(run(&root, &["use", "-g", "1.0.0"]));
+    fs::remove_dir_all(root.join("releases/1.0.0")).unwrap();
+
+    assert_success(run(&root, &["use", "-g"]));
+
+    assert_active_target(&root, "2.0.0");
+}
+
+#[cfg(unix)]
+#[test]
+fn global_use_without_version_repairs_invalid_active_target() {
+    let root = temp_root("global-invalid-active");
+    init(&root);
+    mkdir_release(&root, "2.0.0");
+    let external = temp_root("external-active-target");
+    fs::write(external.join("keep"), "preserved").unwrap();
+    std::os::unix::fs::symlink(&external, root.join("active")).unwrap();
+
+    assert_success(run(&root, &["use", "-g"]));
+
+    assert_active_target(&root, "2.0.0");
+    assert_eq!(
+        fs::read_to_string(external.join("keep")).unwrap(),
+        "preserved"
+    );
+}
+
+#[test]
+fn global_use_without_version_preserves_real_active_directory() {
+    let root = temp_root("global-real-active");
+    init(&root);
+    mkdir_release(&root, "2.0.0");
+    fs::create_dir(root.join("active")).unwrap();
+    fs::write(root.join("active/keep"), "preserved").unwrap();
+
+    let err = assert_failure(run(&root, &["use", "-g"]));
+
+    assert!(err.contains("active exists but is not a managed link"));
+    assert_eq!(
+        fs::read_to_string(root.join("active/keep")).unwrap(),
+        "preserved"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn global_use_without_version_repairs_invalid_release_name() {
+    let root = temp_root("global-invalid-release");
+    init(&root);
+    mkdir_release(&root, "invalid");
+    mkdir_release(&root, "2.0.0");
+    std::os::unix::fs::symlink("releases/invalid", root.join("active")).unwrap();
+
+    assert_success(run(&root, &["use", "-g"]));
+
+    assert_active_target(&root, "2.0.0");
+    assert!(root.join("releases/invalid").is_dir());
+}
+
+#[test]
+fn global_use_without_version_preserves_link_when_no_release_is_available() {
+    let root = temp_root("global-no-release");
+    init(&root);
+    mkdir_release(&root, "1.0.0");
+    assert_success(run(&root, &["use", "-g", "1.0.0"]));
+    fs::remove_dir_all(root.join("releases/1.0.0")).unwrap();
+
+    let err = assert_failure(run(&root, &["use", "-g"]));
+
+    assert!(err.contains("no release matches"));
+    assert!(fs::symlink_metadata(root.join("active")).is_ok());
+}
+
 #[cfg(windows)]
 #[test]
 fn global_use_repairs_a_junction_after_the_context_moves() {

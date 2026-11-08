@@ -203,6 +203,10 @@ After that, add `~/Documents/30_Toolchain/relo/active/bin` to your shell `PATH`,
 
 When `version` is omitted, `relo use` selects the active release, or `latest`
 when no active release exists.
+`relo use -g` also selects `latest` when the existing `active` link points to a
+missing or invalid release, then replaces the link. Real files and directories
+at `active` are never removed. If no release is available, the link is preserved
+and the command reports an error.
 
 `relo init` refuses to overwrite an existing `relo.yaml` unless `--force` is
 passed.

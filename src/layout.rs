@@ -136,6 +136,27 @@ impl Layout {
         }
     }
 
+    pub fn default_release_for_activation(&self) -> Result<Release> {
+        match self.default_release() {
+            Err(err)
+                if matches!(
+                    err.downcast_ref::<ReloError>(),
+                    Some(
+                        ReloError::ActiveMissing(_)
+                            | ReloError::ActiveInvalidTarget(_)
+                            | ReloError::InvalidRelease(_)
+                    )
+                ) =>
+            {
+                // A stale link can be replaced, but filesystem errors and real
+                // files/directories must still be reported without removing them.
+                let (releases, _) = self.releases_with_invalid()?;
+                resolve(&releases, "latest")
+            }
+            result => result,
+        }
+    }
+
     pub fn set_active(&self, id: &str) -> Result<()> {
         let active = self.active_path();
         let existing_target = match fs::symlink_metadata(&active) {

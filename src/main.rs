@@ -149,6 +149,7 @@ fn run() -> Result<()> {
             }
             let release = match version {
                 Some(expr) => layout.resolve(&expr)?,
+                None if global => layout.default_release_for_activation()?,
                 None => layout.default_release()?,
             };
             if verbose > 0 {
