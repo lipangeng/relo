@@ -54,17 +54,13 @@ fn run() -> Result<()> {
         Command::List => {
             let layout = Layout::load(root)?;
             let active = layout.active_version()?;
-            let (releases, invalid) = layout.releases_with_invalid()?;
-            for release in releases {
+            for release in layout.releases()? {
                 let marker = if Some(release.id.as_str()) == active.as_deref() {
                     '*'
                 } else {
                     ' '
                 };
                 println!("{marker} {}", release.id);
-            }
-            for id in invalid {
-                println!("! {id} (invalid)");
             }
         }
         Command::Show { version } => {

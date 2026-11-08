@@ -55,7 +55,9 @@ elevated terminal. Junctions store an absolute target: after moving a Windows
 context, run `relo use -g <version>` to rebuild `active`. Windows contexts used
 with global activation must be on NTFS.
 
-Release directories must be named as `<version>` or `<version>_<label>`, where `<version>` is a dotted numeric version with one or more parts and may start with `v` or `V`. Examples: `8`, `8.1`, `v3.9.9`, `8.1.1.7`, `3.9.9_arm64`, or `V1.12.0_darwin-arm64`. Version comparison uses only the numeric version before `_`, ignoring an optional leading `v` or `V`.
+Release directories may use any name supported by the filesystem, including `nightly`, `jdk-21.0.1`, `内部测试版`, or names containing spaces. Select a release by its full directory name; quote names containing spaces in your shell. Releases are direct subdirectories of `releases/`; path expressions such as `../other` cannot select a release.
+
+Names matching `<version>` or `<version>_<label>` additionally support numeric prefix matching and automatic version selection. Here `<version>` is a dotted ASCII numeric version with one or more parts and an optional `v` or `V` prefix, for example `8`, `8.1`, `v3.9.9`, or `V1.12.0_darwin-arm64`. Comparison uses only the numeric version before `_`. Other names remain selectable, but do not participate in numeric matching or automatic ordering; this includes `1.2.3-rc.1` and `1.2.3+build.42` in this release.
 
 ## Commands
 
@@ -202,9 +204,11 @@ cp ./relo ~/Documents/30_Toolchain/relo/releases/0.2.3/bin/relo
 After that, add `~/Documents/30_Toolchain/relo/active/bin` to your shell `PATH`, or invoke `relo` from that active path.
 
 When `version` is omitted, `relo use` selects the active release, or `latest`
-when no active release exists.
+when no active release exists. Automatic selection considers only recognized
+numeric versions; if none exist, specify a full release name. An existing active
+release is retained even when its name has no numeric version.
 `relo use -g` also selects `latest` when the existing `active` link points to a
-missing or invalid release, then replaces the link. Real files and directories
+missing release or a target outside the managed release layout, then replaces the link. Real files and directories
 at `active` are never removed. If no release is available, the link is preserved
 and the command reports an error.
 
@@ -331,6 +335,8 @@ latest
 ```
 
 Numeric expressions can use any number of dotted parts and choose the highest matching dotted numeric version unless they exactly match a full release directory name. Exact full directory names match directly. If `3.9.9`, `3.9.9_arm64`, and `3.9.9_internal` exist, `3.9.9` resolves to the unlabeled release. If only labeled variants exist, `3.9.9` is ambiguous and the full release name must be specified.
+
+Full directory names always take precedence, including a directory literally named `latest`. Otherwise, the explicit expression `latest` selects the highest recognized numeric version. With no version argument and no active release, automatic selection always uses numeric versions, even if a directory named `latest` exists. If no numeric versions exist, the error lists available names and asks for an explicit selection. Listing order does not imply version precedence for arbitrary names.
 
 ## Configuration
 

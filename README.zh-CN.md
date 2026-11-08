@@ -80,7 +80,9 @@ Windows context 必须位于 NTFS 文件系统。
 
 共享 home 模式下，所有 release 共用 `<context>/home`。版本独立 home 模式下，每个 release 使用 `<context>/homes/<version>`。
 
-release 目录名必须是 `<version>` 或 `<version>_<label>`，其中 `<version>` 是一段或多段的点分数字版本，也可以用 `v` 或 `V` 开头，例如 `8`、`8.1`、`v3.9.9`、`8.1.1.7`、`3.9.9_arm64`、`V1.12.0_darwin-arm64`。版本比较只使用 `_` 前面的数字版本部分，并忽略可选的 `v` 或 `V` 前缀。
+release 目录可以使用文件系统支持的任意名称，例如 `nightly`、`jdk-21.0.1`、`内部测试版` 或包含空格的名称。完整目录名可以直接选择；在 shell 中使用包含空格的名称时需要加引号。release 必须是 `releases/` 下的直接子目录，不能通过 `../other` 等路径表达式选择。
+
+符合 `<version>` 或 `<version>_<label>` 格式的名称还支持数字前缀匹配和自动版本选择，其中 `<version>` 是一段或多段的 ASCII 点分数字，可带 `v` 或 `V` 前缀，例如 `8`、`8.1`、`v3.9.9`、`V1.12.0_darwin-arm64`。比较只使用 `_` 前面的数字版本部分。其他名称仍可精确选择，但不参与数字匹配或自动排序；本版中的 `1.2.3-rc.1` 和 `1.2.3+build.42` 也按普通名称处理。
 
 ## 快速开始
 
@@ -107,9 +109,9 @@ cp ./relo ~/Documents/30_Toolchain/relo/releases/0.2.3/bin/relo
 
 `relo init` 会创建 `releases/`、home 目录和 `relo.yaml`。如果 `relo.yaml` 已存在，默认不会覆盖；需要覆盖时传 `--force`。
 
-如果省略 `version`，`relo use`、`relo print release`、`relo print path`、`relo print env` 等需要 release 上下文的命令会优先选择 active release；如果还没有 active，则选择 `latest`。
+如果省略 `version`，`relo use`、`relo print release`、`relo print path`、`relo print env` 等需要 release 上下文的命令会优先选择 active release，即使其名称不包含数字版本；如果还没有 active，则自动选择最高的可识别数字版本。没有数字版本时，需要指定完整目录名。
 
-`relo use -g` 在现有 `active` 链接指向不存在或无效的 release 时，也会选择 `latest` 并重建链接。不会删除 `active` 位置的真实文件或目录；如果没有可用 release，则保留原链接并报错。
+`relo use -g` 在现有 `active` 链接指向不存在的 release 或托管目录结构以外的位置时，也会自动选择最高的可识别数字版本并重建链接。不会删除 `active` 位置的真实文件或目录；如果没有可自动选择的 release，则保留原链接并报错。
 
 ## 命令总览
 
@@ -370,7 +372,9 @@ latest
 
 规则：
 
-- `latest` 选择点分数字版本最高的 release。
+- 完整目录名始终优先精确匹配，包括名称恰好为 `latest` 的目录。否则，显式表达式 `latest` 选择点分数字版本最高的 release。
+- 不带版本且没有 active 时，只按数字版本自动选择，即使存在名为 `latest` 的目录也如此。没有数字版本则列出可用目录并要求显式选择。
+- 任意名称的目录都可以精确选择；列表中的显示顺序不代表这些目录的新旧关系。
 - `3`、`3.5`、`8.1.1.7` 这类数字表达式可以包含任意段数；如果没有精确匹配完整目录名，则作为前缀表达式选择匹配范围内最高的点分数字版本。
 - `3.5.0` 会优先匹配无 label 的 `3.5.0` 目录。
 - `3.5.0_arm64` 这类完整目录名会精确匹配。
@@ -429,7 +433,7 @@ Release 专属的 `path` 条目排在全局 path 条目之前。`path` 在 env �
 
 `init` 初始化 context。默认使用共享 home；传 `--home versioned` 可改为版本独立 home；传多个 `--path` 可设置初始 path 配置。
 
-`list` 列出 `releases/` 下的 release。当前 active release 前面显示 `*`，无效 release 目录前面显示 `!`。
+`list` 列出 `releases/` 下的 release，包括不带数字版本的目录。当前 active release 前面显示 `*`。
 
 `show` 不带版本时显示 context、active、release、home、home mode 和 release 数量；带版本时显示该版本的 release 路径、home 路径和是否 active。
 
@@ -449,7 +453,7 @@ Release 专属的 `path` 条目排在全局 path 条目之前。`path` 在 env �
 
 `active points to missing release`：`active` 指向的 release 目录不存在。可以恢复该 release，用 `relo use -g` 自动选择 latest 并重建链接，或用 `relo use -g <version>` 切换到指定 release。
 
-`invalid release directory`：`releases/` 下的目录名不是 `<version>` 或 `<version>_<label>`。
+`cannot determine latest`：存在 release，但没有可用于自动比较的数字版本。请从错误列出的目录中选择完整名称，例如 `relo use -g nightly`。
 
 `ambiguous release`：版本表达式匹配到多个带 label 的同版本 release。请使用完整目录名。
 

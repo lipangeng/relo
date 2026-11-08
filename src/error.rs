@@ -12,8 +12,8 @@ pub enum ReloError {
     ActiveMissing(String),
     #[error("active points to invalid target: {0}")]
     ActiveInvalidTarget(String),
-    #[error("invalid release directory: {0}")]
-    InvalidRelease(String),
+    #[error("cannot determine latest: no comparable numeric releases\navailable:\n  {0}\nplease specify full release name")]
+    NoComparableRelease(String),
     #[error("no release matches: {0}")]
     NoMatch(String),
     #[error("ambiguous release: {expr}\nmatched:\n{matches}\nplease specify full release name")]

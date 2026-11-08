@@ -1261,7 +1261,7 @@ fn active_must_point_to_releases_relative_target() {
 }
 
 #[test]
-fn list_marks_invalid_release_directories_without_failing() {
+fn list_includes_named_release_directories() {
     let root = temp_root("invalid-list");
     init(&root);
     mkdir_release(&root, "1.0.0");
@@ -1269,7 +1269,8 @@ fn list_marks_invalid_release_directories_without_failing() {
 
     let out = assert_success(run(&root, &["list"]));
     assert!(out.contains("  1.0.0"));
-    assert!(out.contains("! not-a-version (invalid)"));
+    assert!(out.contains("  not-a-version"));
+    assert!(!out.contains("(invalid)"));
 }
 
 #[test]
@@ -1385,7 +1386,7 @@ fn global_use_without_version_preserves_real_active_directory() {
 
 #[cfg(unix)]
 #[test]
-fn global_use_without_version_repairs_invalid_release_name() {
+fn global_use_without_version_keeps_named_active_release() {
     let root = temp_root("global-invalid-release");
     init(&root);
     mkdir_release(&root, "invalid");
@@ -1394,8 +1395,106 @@ fn global_use_without_version_repairs_invalid_release_name() {
 
     assert_success(run(&root, &["use", "-g"]));
 
-    assert_active_target(&root, "2.0.0");
+    assert_active_target(&root, "invalid");
     assert!(root.join("releases/invalid").is_dir());
+}
+
+#[test]
+fn named_releases_support_exact_selection_and_default_active() {
+    let root = temp_root("named-releases");
+    init(&root);
+    let names = [
+        "nightly",
+        "内部测试版",
+        "jdk-21.0.1",
+        "1.2.3-rc.1",
+        "1.2.3+build.42",
+        "1.2.3_中文版",
+        "带 空格 🚀",
+        "１.２.３",
+        "1.2.3_",
+    ];
+    for name in names {
+        mkdir_release(&root, name);
+    }
+    mkdir_release(&root, "3.9.0");
+    mkdir_release(&root, "3.10.0");
+    for name in names {
+        assert_eq!(
+            assert_success(run(&root, &["print", "version", "--version", name])),
+            format!("{name}\n")
+        );
+        assert_success(run(&root, &["use", "-g", name]));
+        assert_active_target(&root, name);
+        assert_success(run(&root, &["use", "-g"]));
+        assert_active_target(&root, name);
+        assert_eq!(
+            assert_success(run(&root, &["print", "version"])),
+            format!("{name}\n")
+        );
+        assert_success(run(&root, &["use", "--shell", "posix"]));
+        assert_success(run(&root, &["show", name]));
+        assert!(assert_success(run(&root, &["list"])).contains(&format!("* {name}\n")));
+    }
+    for expr in ["latest", "3"] {
+        assert_eq!(
+            assert_success(run(&root, &["print", "version", "--version", expr])),
+            "3.10.0\n"
+        );
+    }
+    assert_success(run(&root, &["use", "-g", "3.9.0"]));
+    assert_active_target(&root, "3.9.0");
+}
+
+#[test]
+fn latest_requires_comparable_versions_and_preserves_stale_link() {
+    let root = temp_root("named-latest");
+    init(&root);
+    for name in ["nightly", "内部版", "jdk-21"] {
+        mkdir_release(&root, name);
+    }
+    for args in [
+        vec!["use", "-g"],
+        vec!["use", "--shell", "posix"],
+        vec!["print", "version", "--version", "latest"],
+    ] {
+        let err = assert_failure(run(&root, &args));
+        assert!(err.contains("cannot determine latest"));
+        assert!(err.contains("please specify full release name"));
+        assert!(err.contains("内部版"));
+        assert!(fs::symlink_metadata(root.join("active")).is_err());
+    }
+    assert_success(run(&root, &["use", "-g", "nightly"]));
+    fs::remove_dir_all(root.join("releases/nightly")).unwrap();
+    let err = assert_failure(run(&root, &["use", "-g"]));
+    assert!(err.contains("cannot determine latest"));
+    assert!(fs::symlink_metadata(root.join("active")).is_ok());
+}
+
+#[test]
+fn full_name_latest_takes_precedence_only_for_explicit_selection() {
+    let root = temp_root("named-latest-directory");
+    init(&root);
+    mkdir_release(&root, "latest");
+    mkdir_release(&root, "2.0.0");
+    assert_success(run(&root, &["use", "-g"]));
+    assert_active_target(&root, "2.0.0");
+    assert_success(run(&root, &["use", "-g", "latest"]));
+    assert_active_target(&root, "latest");
+    assert_success(run(&root, &["use", "-g"]));
+    assert_active_target(&root, "latest");
+}
+
+#[test]
+fn release_selection_rejects_paths_outside_direct_children() {
+    let root = temp_root("named-path-traversal");
+    init(&root);
+    mkdir_release(&root, "nightly");
+    for expr in ["../nightly", "releases/nightly", "/tmp", ".", ".."] {
+        let err = assert_failure(run(&root, &["use", "-g", expr]));
+        assert!(err.contains("no release matches"));
+        assert!(fs::symlink_metadata(root.join("active")).is_err());
+    }
 }
 
 #[test]

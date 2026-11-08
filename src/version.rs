@@ -6,7 +6,7 @@ use std::path::PathBuf;
 #[derive(Clone, Debug, Eq)]
 pub struct Release {
     pub id: String,
-    pub version: DottedVersion,
+    pub version: Option<DottedVersion>,
     pub label: Option<String>,
     pub path: PathBuf,
 }
@@ -76,22 +76,21 @@ impl PartialOrd for Release {
     }
 }
 
-pub fn parse_release(id: &str, path: PathBuf) -> Result<Release> {
+pub fn parse_release(id: &str, path: PathBuf) -> Release {
     // Release directory names keep the full id, but version matching only uses
     // the dotted version part before the separator: 3.9.9_arm64 -> 3.9.9 + arm64.
     let (version_text, label) = match id.split_once('_') {
         Some((version_text, label)) if !label.is_empty() => (version_text, Some(label.to_string())),
-        Some(_) => return Err(ReloError::InvalidRelease(id.to_string()).into()),
+        Some(_) => (id, None),
         None => (id, None),
     };
-    let version = DottedVersion::parse(version_text)
-        .map_err(|_| ReloError::InvalidRelease(id.to_string()))?;
-    Ok(Release {
+    let version = DottedVersion::parse(version_text).ok();
+    Release {
         id: id.to_string(),
         version,
         label,
         path,
-    })
+    }
 }
 
 pub fn resolve(releases: &[Release], expr: &str) -> Result<Release> {
@@ -99,12 +98,12 @@ pub fn resolve(releases: &[Release], expr: &str) -> Result<Release> {
         return Err(ReloError::NoMatch(expr.to_string()).into());
     }
 
-    if expr == "latest" {
-        return Ok(releases.iter().max().unwrap().clone());
-    }
-
     if let Some(exact) = releases.iter().find(|release| release.id == expr) {
         return Ok(exact.clone());
+    }
+
+    if expr == "latest" {
+        return resolve_latest(releases);
     }
 
     let version_expr =
@@ -112,7 +111,12 @@ pub fn resolve(releases: &[Release], expr: &str) -> Result<Release> {
 
     let matches: Vec<&Release> = releases
         .iter()
-        .filter(|release| release.version.starts_with(&version_expr))
+        .filter(|release| {
+            release
+                .version
+                .as_ref()
+                .is_some_and(|v| v.starts_with(&version_expr))
+        })
         .collect();
 
     if matches.is_empty() {
@@ -122,7 +126,7 @@ pub fn resolve(releases: &[Release], expr: &str) -> Result<Release> {
     let exact_version_matches = matches
         .iter()
         .copied()
-        .filter(|release| release.version == version_expr)
+        .filter(|release| release.version.as_ref() == Some(&version_expr))
         .collect::<Vec<_>>();
     if !exact_version_matches.is_empty() {
         // A bare exact version expression prefers the unlabeled directory.
@@ -150,4 +154,23 @@ pub fn resolve(releases: &[Release], expr: &str) -> Result<Release> {
     }
 
     Ok(matches.into_iter().max().unwrap().clone())
+}
+
+pub fn resolve_latest(releases: &[Release]) -> Result<Release> {
+    if releases.is_empty() {
+        return Err(ReloError::NoMatch("latest".to_string()).into());
+    }
+    releases
+        .iter()
+        .filter(|release| release.version.is_some())
+        .max()
+        .cloned()
+        .ok_or_else(|| {
+            let mut names = releases
+                .iter()
+                .map(|release| release.id.as_str())
+                .collect::<Vec<_>>();
+            names.sort();
+            ReloError::NoComparableRelease(names.join("\n  ")).into()
+        })
 }

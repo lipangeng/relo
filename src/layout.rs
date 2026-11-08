@@ -1,7 +1,7 @@
 use crate::config::{Config, HomeMode};
 use crate::error::ReloError;
 use crate::paths;
-use crate::version::{parse_release, resolve, Release};
+use crate::version::{parse_release, resolve, resolve_latest, Release};
 use anyhow::{bail, Context, Result};
 use indexmap::IndexMap;
 use std::borrow::Cow;
@@ -81,30 +81,11 @@ impl Layout {
                 continue;
             }
             let id = entry.file_name().to_string_lossy().to_string();
-            releases.push(parse_release(&id, entry.path())?);
+            releases.push(parse_release(&id, entry.path()));
         }
         // Keep all callers on the same dotted-version ordering contract.
         releases.sort();
         Ok(releases)
-    }
-
-    pub fn releases_with_invalid(&self) -> Result<(Vec<Release>, Vec<String>)> {
-        let mut releases = Vec::new();
-        let mut invalid = Vec::new();
-        for entry in fs::read_dir(self.root.join("releases"))? {
-            let entry = entry?;
-            if !entry.file_type()?.is_dir() {
-                continue;
-            }
-            let id = entry.file_name().to_string_lossy().to_string();
-            match parse_release(&id, entry.path()) {
-                Ok(release) => releases.push(release),
-                Err(_) => invalid.push(id),
-            }
-        }
-        releases.sort();
-        invalid.sort();
-        Ok((releases, invalid))
     }
 
     pub fn resolve(&self, expr: &str) -> Result<Release> {
@@ -125,14 +106,13 @@ impl Layout {
         if !self.release_path(&id).is_dir() {
             return Err(ReloError::ActiveMissing(id).into());
         }
-        parse_release(&id, self.release_path(&id))?;
         Ok(Some(id))
     }
 
     pub fn default_release(&self) -> Result<Release> {
         match self.active_version()? {
             Some(id) => self.resolve(&id),
-            None => self.resolve("latest"),
+            None => resolve_latest(&self.releases()?),
         }
     }
 
@@ -141,17 +121,12 @@ impl Layout {
             Err(err)
                 if matches!(
                     err.downcast_ref::<ReloError>(),
-                    Some(
-                        ReloError::ActiveMissing(_)
-                            | ReloError::ActiveInvalidTarget(_)
-                            | ReloError::InvalidRelease(_)
-                    )
+                    Some(ReloError::ActiveMissing(_) | ReloError::ActiveInvalidTarget(_))
                 ) =>
             {
                 // A stale link can be replaced, but filesystem errors and real
                 // files/directories must still be reported without removing them.
-                let (releases, _) = self.releases_with_invalid()?;
-                resolve(&releases, "latest")
+                resolve_latest(&self.releases()?)
             }
             result => result,
         }
